@@ -1,0 +1,82 @@
+<comment>
+problem   = idealized planetary giant impact
+configure = --prob=giant_impact --grav=mg -hdf5
+
+<job>
+problem_id = giant_impact  # problem ID: basename of output filenames
+
+<output1>
+file_type  = hst      # History data dump
+dt         = 0.01     # time increment between outputs
+
+<output2>
+file_type  = hdf5     # Binary data dump
+variable   = prim     # variables to be output
+dt         = 0.02     # time increment between outputs
+x3_slice   = 0.0      # slice through x3=0.0
+
+<time>
+cfl_number  = 0.3     # The Courant, Friedrichs, & Lewy (CFL) Number
+nlim        = -1      # cycle limit
+tlim        = 16.4    # time limit
+integrator  = rk2     # time integration algorithm
+xorder      = 2       # order of spatial reconstruction
+ncycle_out  = 1       # interval for stdout summary info
+
+<mesh>
+nx1        = 64        # Number of zones in X1-direction
+x1min      = -3.5      # minimum value of X1
+x1max      = 3.5       # maximum value of X1
+ix1_bc     = user      # inner-X1 boundary flag
+ox1_bc     = user      # outer-X1 boundary flag
+
+nx2        = 64        # Number of zones in X2-direction
+x2min      = -3.5      # minimum value of X2
+x2max      = 3.5       # maximum value of X2
+ix2_bc     = user      # inner-X2 boundary flag
+ox2_bc     = user      # outer-X2 boundary flag
+
+nx3        = 64        # Number of zones in X3-direction
+x3min      = -3.5      # minimum value of X3
+x3max      = 3.5       # maximum value of X3
+ix3_bc     = user      # inner-X3 boundary flag
+ox3_bc     = user      # outer-X3 boundary flag
+
+refinement  = adaptive  # Adaptive Mesh Refinement
+numlevel    = 6         # Number of AMR levels
+derefine_count = 5      # Number of Steps
+
+<meshblock>
+nx1        = 8
+nx2        = 8
+nx3        = 8
+
+<gravity>
+mgmode     = FMG        # set the solver mode: FMG or MGI
+threshold  = 0.0        # set the convergence threshold
+ix1_bc     = multipole  # Inner X1 boundary condition
+ox1_bc     = multipole  # Outer X1 boundary condition
+ix2_bc     = multipole  # Inner X2 boundary condition
+ox2_bc     = multipole  # Outer X2 boundary condition
+ix3_bc     = multipole  # Inner X3 boundary condition
+ox3_bc     = multipole  # Outer X3 boundary condition
+mporder    = 4          # order of multipole expansion, 2 or 4
+nodipole   = false      # set true to set dipole to zero
+
+<hydro>
+gamma  = 2.0  # gamma = C_p/C_v
+dfloor = 1.0e-5  # density floor
+pfloor = 1.0e-5  # pressure floor
+
+<problem>
+damb       = 1.0e-3   # ambient density
+pamb       = 1.0e-3   # ambient pressure
+dc_1       = 785.0    # central density 1st polytrope (before rescaling, @Joseph-Weller?)
+dc_2       = 471.0    # central density 2nd polytrope (before rescaling, @Joseph-Weller?)
+mrat       = 0.18     # mass ratio of polytropes
+mtot       = 1.1      # total mass of polytropes
+x_disp     = 0.2      # second polytrope x-axis center offset from middle
+y_disp     = 0.1      # second polytrope y-axis center offset from middle
+vcoll      = -0.984   # collision velocity
+grav_const = 0.098    # gravitational constant value
+njeans     = 64       # Jeans length mumber for AMR
