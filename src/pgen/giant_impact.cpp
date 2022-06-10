@@ -113,18 +113,18 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   // compute polytrope centers as offset from coordinate origin
   Real x_disp = pin->GetReal("problem", "x_disp");
   Real y_disp = pin->GetReal("problem", "y_disp");
-  Real del_x1 = -1.0*(mass_2/mtot)*x_disp;
-  Real del_x2 = (mass_1/mtot)*x_disp;
-  Real del_y1 = -1.0*(mass_2/mtot)*y_disp;
-  Real del_y2 = (mass_1/mtot)*y_disp;
+  Real delx_1 = -1.0*(mass_2/mtot)*x_disp;
+  Real delx_2 = (mass_1/mtot)*x_disp;
+  Real dely_1 = -1.0*(mass_2/mtot)*y_disp;
+  Real dely_2 = (mass_1/mtot)*y_disp;
 
   // velocities for each colliding body
   Real vcoll = pin->GetOrAddReal("problem", "vcoll", 0.0);
-  Real del_vx1 = -1.0*(mass_2/mtot)*vcoll;
-  Real del_vx2 = (mass_1/mtot)*vcoll;
+  Real delvx_1 = -1.0*(mass_2/mtot)*vcoll;
+  Real delvx_2 = (mass_1/mtot)*vcoll;
 
   // compute central densities and pressures of planetary bodies
-  // TODO(@pdmullen): what is this doing, @Joseph-Weller?
+  // NOTE(@pdmullen): what is this doing, @Joseph-Weller?
   Real dcrat_1 = pin->GetOrAddReal("problem", "dc_1", 1.0);
   Real dcrat_2 = pin->GetOrAddReal("problem", "dc_2", 1.0);
   Real dc_1 = ((dcrat_1 - dcrat_2)/(1.0 - 0.1))*(mass_1 - 0.1)+dcrat_2;
@@ -135,9 +135,9 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   Real pc_2 = (2.0*gconst/PI)*SQR(dc_2*rad_max_2);
 
   // define collision origin
-  Real x0 = pin->GetOrAddReal("problem", "x1_0", 0.0);
-  Real y0 = pin->GetOrAddReal("problem", "x2_0", 0.0);
-  Real z0 = pin->GetOrAddReal("problem", "x3_0", 0.0);
+  Real x0 = pin->GetOrAddReal("problem", "x0", 0.0);
+  Real y0 = pin->GetOrAddReal("problem", "y0", 0.0);
+  Real z0 = pin->GetOrAddReal("problem", "z0", 0.0);
 
   // setup giant impact
   for (int k=ks; k<=ke; k++) {
@@ -147,10 +147,10 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         Real x = pcoord->x1v(i);
         Real y = pcoord->x2v(j);
         Real z = pcoord->x3v(k);
-        Real rad_1 = std::sqrt(SQR(x-(x0+del_x1)) + SQR(y-(y0+del_y1)) + SQR(z-z0));
-        Real rad_2 = std::sqrt(SQR(x-(x0+del_x2)) + SQR(y-(y0+del_y2)) + SQR(z-z0));
+        Real rad_1 = std::sqrt(SQR(x-(x0+delx_1)) + SQR(y-(y0+dely_1)) + SQR(z-z0));
+        Real rad_2 = std::sqrt(SQR(x-(x0+delx_2)) + SQR(y-(y0+dely_2)) + SQR(z-z0));
 
-        // TODO(@Joseph-Weller): a few notes:
+        // TODO(@Joseph-Weller):
         // (1) some of the coefficients below seem rather arbitrary. Can we derive them in
         //     a more general way? Or at least make them an input parameter?
         // (2) let's take a really close look at this logic and make sure it is giving us
@@ -169,20 +169,20 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
             pres = (pc_1*std::pow(1.0/(PI*0.97)*std::sin((PI*0.97)),2.0) *
                     std::pow(rad_max_1*0.97/rad_1,16.0));
           }
-          momx = den*del_vx1;
+          momx = den*delvx_1;
         }
 
         if (rad_2 <= rad_max_2*1.3) {  // inside planetary body 2 body+atmosphere
           if (rad_2 <= rad_max_2*0.97) {  // inside planetary body 2
             den = dc_2*rad_max_2/(PI*rad_2)*std::sin((PI*rad_2)/rad_max_2);
             pres = pc_2*std::pow(rad_max_2/(PI*rad_2)*std::sin((PI*rad_2)/rad_max_2),2.0);
-          } else {  // inside planetary body 1 atmosphere
+          } else {  // inside planetary body 2 atmosphere
             den = (dc_2*1.0/(PI*0.97) *
                    std::sin((PI*0.97))*std::pow(rad_max_2*0.97/rad_2,15.0));
             pres = (pc_2*std::pow(1.0/(PI*0.97)*std::sin((PI*0.97)),2.0) *
                     std::pow(rad_max_2*0.97/rad_2,16.0));
           }
-          momx = den*del_vx2;
+          momx = den*delvx_2;
         }
 
         phydro->u(IDN,k,j,i) = den;
