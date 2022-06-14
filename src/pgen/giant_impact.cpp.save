@@ -105,8 +105,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   Real pa = pin->GetOrAddReal("problem", "pamb", 1.0);
 
   // compute masses of the colliding bodies
-  Real mtot = pin->GetOrAddReal("problem", "mtot", 1.1);
-  Real mrat = pin->GetOrAddReal("problem", "mrat", 0.091);
+  Real mtot = pin->GetOrAddReal("problem", "m_total", 1.1);
+  Real mrat = pin->GetOrAddReal("problem", "m_ratio", 0.091);
   Real mass_2 = mrat*mtot;
   Real mass_1 = mtot - mass_2;
 
@@ -125,13 +125,13 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
   // compute central densities and pressures of planetary bodies
   // uses Earth and Mars benchmarks to scale polytropes and calculate radii
-  // applies a linear fitting in mass to find central density, scales radius to have
+  // applies a linear fitting to find central density, scales radius to have
   // appropriate mass.
   // NOTE(@pdmullen): what is this doing, @Joseph-Weller?
   Real dcrat_1 = pin->GetOrAddReal("problem", "dc_earth", 1.0);
   Real dcrat_2 = pin->GetOrAddReal("problem", "dc_mars", 1.0);
-  Real dc_1 = ((dcrat_1 - dcrat_2)/(1.0 - 0.107))*(mass_1 - 0.107)+dcrat_2;
-  Real dc_2 = ((dcrat_1 - dcrat_2)/(1.0 - 0.107))*(mass_2-  0.107)+dcrat_2;
+  Real dc_1 = ((dcrat_1 - dcrat_2)/(1.0 - 0.1))*(mass_1 - 0.1)+dcrat_2;
+  Real dc_2 = ((dcrat_1 - dcrat_2)/(1.0 - 0.1))*(mass_2-  0.1)+dcrat_2;
   Real rad_max_1 = std::cbrt((PI/4.0)*(mass_1/dc_1));
   Real rad_max_2 = std::cbrt((PI/4.0)*(mass_2/dc_2));
   Real pc_1 = (2.0*gconst/PI)*SQR(dc_1*rad_max_1);
