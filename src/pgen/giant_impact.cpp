@@ -30,6 +30,7 @@
 namespace {
 Real gconst;
 Real njeans;
+Real m_refine;
 }  // namespace
 
 int JeansCondition(MeshBlock *pmb);
@@ -64,6 +65,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   SetGravityThreshold(0.0);  // NOTE(@pdmullen): as far as I know, not used in FMG
   if (adaptive) {
     njeans = pin->GetReal("problem","njeans");
+    m_refine = pin->GetReal("problem","m_refine");
     EnrollUserRefinementCondition(JeansCondition);
   }
 
@@ -140,7 +142,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   //input parameters for atmoshere merger and extent
   Real atm_merge = pin->GetOrAddReal("problem", "atm_merge", 0.03);
   Real atm_ext = pin->GetOrAddReal("problem", "atm_ext", 0.3);
-  Real Poly_cut = 1.0-atm_merge
+  Real Poly_cut = 1.0-atm_merge;
 
   // define collision origin
   Real x0 = pin->GetOrAddReal("problem", "x0", 0.0);
@@ -209,7 +211,9 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 // AMR refinement condition
 int JeansCondition(MeshBlock *pmb) {
   Real njmin = 1e300;
+  Real mass  = 1e300;
   const Real dx = pmb->pcoord->dx1f(0);  // assuming uniform cubic cells
+  const Real vol = dx*dx*dx;
   const Real gamma = pmb->peos->GetGamma();
   const Real fac = 2.0*PI*std::sqrt(gamma)/dx;
   for (int k=pmb->ks-NGHOST; k<=pmb->ke+NGHOST; ++k) {
@@ -217,13 +221,16 @@ int JeansCondition(MeshBlock *pmb) {
       for (int i=pmb->is-NGHOST; i<=pmb->ie+NGHOST; ++i) {
         Real nj = fac*std::sqrt(pmb->phydro->w(IPR,k,j,i))/pmb->phydro->w(IDN,k,j,i);
         njmin = std::min(njmin, nj);
+	Real m_amount = vol*pmb->phydro->u(IDN,k,j,i);
+	mass = std::min(mass, m_amount);
       }
     }
   }
-
+  if (mass > m_refine)
+    return 1;
   if (njmin < njeans)
     return 1;
-  if (njmin > njeans * 2.5)
+  if (mass < m_refine * 0.1)
     return -1;
   return 0;
 }

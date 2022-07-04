@@ -80,5 +80,6 @@ y_disp     = 1.0      # second polytrope y-axis center offset from middle
 vcoll      = -3.107   # collision velocity
 grav_const = 9.81    # gravitational constant value
 njeans     = 64       # Jeans length mumber for AMR
+m_refine   = 2.0e-6   # Mass refinement value for AMR
 atm_merge  = 0.03     # percent removed from outer layer of polytrope to begin atmosphere
 atm_ext    = 1.3      # Max radius of atmosphere, should be >1.0, 1.0 is radius of polytrope
