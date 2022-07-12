@@ -211,7 +211,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 // AMR refinement condition
 int JeansCondition(MeshBlock *pmb) {
   Real njmin = 1e300;
-  Real mass  = 1e300;
+  Real mass  = 0.0;
   const Real dx = pmb->pcoord->dx1f(0);  // assuming uniform cubic cells
   const Real vol = dx*dx*dx;
   const Real gamma = pmb->peos->GetGamma();
@@ -219,10 +219,12 @@ int JeansCondition(MeshBlock *pmb) {
   for (int k=pmb->ks-NGHOST; k<=pmb->ke+NGHOST; ++k) {
     for (int j=pmb->js-NGHOST; j<=pmb->je+NGHOST; ++j) {
       for (int i=pmb->is-NGHOST; i<=pmb->ie+NGHOST; ++i) {
+	//Real dxi = pmb->pcoord->dx1f(i);
+	//Real vol = dxi*dxi*dxi
         Real nj = fac*std::sqrt(pmb->phydro->w(IPR,k,j,i))/pmb->phydro->w(IDN,k,j,i);
         njmin = std::min(njmin, nj);
 	Real m_amount = vol*pmb->phydro->u(IDN,k,j,i);
-	mass = std::min(mass, m_amount);
+	mass = std::max(mass, m_amount);
       }
     }
   }
