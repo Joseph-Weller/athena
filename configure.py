@@ -92,7 +92,8 @@ parser.add_argument(
 parser.add_argument('--eos',
                     default='adiabatic',
                     choices=['adiabatic', 'isothermal', 'general/eos_table',
-                             'general/hydrogen', 'general/ideal'],
+                             'general/hydrogen', 'general/ideal', 'planetary/eos_table',
+                             'planetary/tillotson', 'planetary/gamma_law'],
                     help='select equation of state')
 
 # --flux=[name] argument
@@ -304,6 +305,8 @@ if args['flux'] == 'default':
         args['flux'] = 'hlld'
     elif args['eos'] == 'isothermal':
         args['flux'] = 'hlle'
+    elif args['eos'][:10] == 'planetary/':
+        args['flux'] = 'llf'
     else:
         args['flux'] = 'hllc'
 
@@ -349,6 +352,13 @@ if args['eos'][:8] == 'general/':
     if args['flux'] not in ['hllc', 'hlld']:
         raise SystemExit('### CONFIGURE ERROR: '
                          + 'General EOS is incompatible with flux ' + args['flux'])
+if args['eos'][:10] == 'planetary/':
+    if args['s'] or args['g']:
+        raise SystemExit('### CONFIGURE ERROR: '
+                         + 'Planetary EOS is incompatible with relativity')
+    if args['flux'] not in ['llf']:
+        raise SystemExit('### CONFIGURE ERROR: '
+                         + 'General EOS is incompatible with flux ' + args['flux'])
 
 # --- Step 3. Set definitions and Makefile options based on above argument
 
@@ -369,17 +379,28 @@ makefile_options['EOS_FILE'] = args['eos']
 definitions['EQUATION_OF_STATE'] = args['eos']
 # set number of hydro variables for adiabatic/isothermal
 definitions['GENERAL_EOS'] = '0'
-makefile_options['GENERAL_EOS_FILE'] = 'noop'
+definitions['PLANETARY_EOS'] = '0'
+makefile_options['GENERAL_EOS_FILE'] = 'general_noop'
+makefile_options['PLANETARY_EOS_FILE'] = 'planetary_noop'
+
 definitions['EOS_TABLE_ENABLED'] = '0'
 if args['eos'] == 'isothermal':
     definitions['NHYDRO_VARIABLES'] = '4'
 elif args['eos'] == 'adiabatic':
     definitions['NHYDRO_VARIABLES'] = '5'
-else:
+elif args['eos'][:8] == 'general/':
     definitions['GENERAL_EOS'] = '1'
+    makefile_options['EOS_FILE'] = args['eos'][:10] + 'general_' + args['eos'][10:]
     makefile_options['GENERAL_EOS_FILE'] = 'general'
     definitions['NHYDRO_VARIABLES'] = '5'
     if args['eos'] == 'general/eos_table':
+        definitions['EOS_TABLE_ENABLED'] = '1'
+elif args['eos'][:10] == 'planetary/':
+    definitions['PLANETARY_EOS'] = '1'
+    makefile_options['EOS_FILE'] = args['eos'][:10] + 'planetary_' + args['eos'][10:]
+    makefile_options['PLANETARY_EOS_FILE'] = 'planetary'
+    definitions['NHYDRO_VARIABLES'] = '5'
+    if args['eos'] == 'planetary/eos_table':
         definitions['EOS_TABLE_ENABLED'] = '1'
 
 # --flux=[name] argument
@@ -397,6 +418,8 @@ if args['b']:
     definitions['MAGNETIC_FIELDS_ENABLED'] = '1'
     if definitions['GENERAL_EOS'] != '0':
         makefile_options['GENERAL_EOS_FILE'] += '_mhd'
+    elif definitions['PLANETARY_EOS'] != '0':
+        makefile_options['PLANETARY_EOS_FILE'] += '_mhd'
     else:
         makefile_options['EOS_FILE'] += '_mhd'
     definitions['NFIELD_VARIABLES'] = '3'
@@ -409,10 +432,14 @@ if args['b']:
             makefile_options['RSOLVER_FILE'] += '_iso'
     else:
         definitions['NWAVE_VALUE'] = '7'
+    if args['eos'][:10] == 'planetary/':
+        makefile_options['RSOLVER_FILE'] += '_planetary'
 else:
     definitions['MAGNETIC_FIELDS_ENABLED'] = '0'
     if definitions['GENERAL_EOS'] != '0':
         makefile_options['GENERAL_EOS_FILE'] += '_hydro'
+    elif definitions['PLANETARY_EOS'] != '0':
+        makefile_options['PLANETARY_EOS_FILE'] += '_hydro'
     else:
         makefile_options['EOS_FILE'] += '_hydro'
     definitions['NFIELD_VARIABLES'] = '0'
@@ -421,6 +448,8 @@ else:
         definitions['NWAVE_VALUE'] = '4'
     else:
         definitions['NWAVE_VALUE'] = '5'
+    if args['eos'][:10] == 'planetary/':
+        makefile_options['RSOLVER_FILE'] += '_planetary'
 
 # -sts argument
 if args['sts']:
@@ -780,6 +809,7 @@ makefile_options['PROBLEM_FILE'] += '.cpp'
 makefile_options['COORDINATES_FILE'] += '.cpp'
 makefile_options['EOS_FILE'] += '.cpp'
 makefile_options['GENERAL_EOS_FILE'] += '.cpp'
+makefile_options['PLANETARY_EOS_FILE'] += '.cpp'
 makefile_options['RSOLVER_FILE'] += '.cpp'
 
 # Read templates

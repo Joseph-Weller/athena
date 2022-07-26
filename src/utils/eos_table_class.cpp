@@ -133,6 +133,7 @@ EosTable::EosTable(ParameterInput *pin) :
     table(), logRhoMin(), logRhoMax(),
     rhoUnit(pin->GetOrAddReal("hydro", "eos_rho_unit", 1.0)),
     eUnit(pin->GetOrAddReal("hydro", "eos_egas_unit", 1.0)),
+    esUnit(pin->GetOrAddReal("hydro", "eos_espec_unit", 1.0)),
     hUnit(eUnit/rhoUnit) {
   std::string eos_fn, eos_file_type;
   eos_fn = pin->GetString("hydro", "eos_file_name");

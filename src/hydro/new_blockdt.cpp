@@ -73,7 +73,7 @@ void Hydro::NewBlockTimeStep() {
           wi[IVX] = w(IVX,k,j,i);
           wi[IVY] = w(IVY,k,j,i);
           wi[IVZ] = w(IVZ,k,j,i);
-          if (NON_BAROTROPIC_EOS) wi[IPR] = w(IPR,k,j,i);
+          if (NON_BAROTROPIC_EOS) wi[IEN] = w(IEN,k,j,i);
           if (fluid_status == FluidFormulation::evolve) {
             if (MAGNETIC_FIELDS_ENABLED) {
               AthenaArray<Real> &bcc = pmb->pfield->bcc, &b_x1f = pmb->pfield->b.x1f,

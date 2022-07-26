@@ -394,15 +394,27 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
       num_vars_++;
     }
 
-    // pressure
-    if (ContainVariable(output_params.variable, "p") ||
-        ContainVariable(output_params.variable, "prim")) {
-      pod = new OutputData;
-      pod->type = "SCALARS";
-      pod->name = "press";
-      pod->data.InitWithShallowSlice(phyd->w, 4, IPR, 1);
-      AppendOutputDataNode(pod);
-      num_vars_++;
+    // pressure or specific internal energy
+    if (!(PLANETARY_EOS)) {
+      if (ContainVariable(output_params.variable, "p") ||
+          ContainVariable(output_params.variable, "prim")) {
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = "press";
+        pod->data.InitWithShallowSlice(phyd->w, 4, IPR, 1);
+        AppendOutputDataNode(pod);
+        num_vars_++;
+      }
+    } else {
+      if (ContainVariable(output_params.variable, "es") ||
+          ContainVariable(output_params.variable, "prim")) {
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = "espec";
+        pod->data.InitWithShallowSlice(phyd->w, 4, IEN, 1);
+        AppendOutputDataNode(pod);
+        num_vars_++;
+      }
     }
   }
 

@@ -143,13 +143,17 @@ class EquationOfState {
 #endif  // #else (#if !RELATIVISTIC_DYNAMICS, #elif !GENERAL_RELATIVITY)
 
   Real PresFromRhoEg(Real rho, Real egas);
+  Real PresFromRhoEs(Real rho, Real espec);
   Real EgasFromRhoP(Real rho, Real pres);
   Real AsqFromRhoP(Real rho, Real pres);
+  Real AsqFromRhoEs(Real rho, Real espec);
   Real GetIsoSoundSpeed() const {return iso_sound_speed_;}
   Real GetDensityFloor() const {return density_floor_;}
   Real GetPressureFloor() const {return pressure_floor_;}
   EosTable* ptable; // pointer to EOS table data
 #if GENERAL_EOS
+  Real GetGamma();
+#elif PLANETARY_EOS
   Real GetGamma();
 #else // not GENERAL_EOS
   Real GetGamma() const {return gamma_;}
@@ -161,7 +165,7 @@ class EquationOfState {
   MeshBlock *pmy_block_;                 // ptr to MeshBlock containing this EOS
   Real iso_sound_speed_, gamma_;         // isothermal Cs, ratio of specific heats
   Real density_floor_, pressure_floor_;  // density and pressure floors
-  Real energy_floor_;                    // energy floor
+  Real espec_floor_, energy_floor_;      // specific internal energy and energy floor
   Real scalar_floor_; // dimensionless concentration floor
   Real sigma_max_, beta_min_;            // limits on ratios of gas quantities to pmag
   Real gamma_max_;                       // maximum Lorentz factor

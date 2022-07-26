@@ -43,6 +43,20 @@ Real press(Real rho, Real T) {
 }
 
 //========================================================================================
+//! \fn void Mesh::InitUserMeshBlockData(ParameterInput *pin)
+//! \brief Allocate arrays for user output variables
+//========================================================================================
+
+void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
+  if (PLANETARY_EOS) {
+    AllocateUserOutputVariables(2);
+    SetUserOutputVariableName(0,"pres");
+    SetUserOutputVariableName(1,"cs");
+  }
+  return;
+}
+
+//========================================================================================
 //! \fn void Mesh::UserWorkAfterLoop(ParameterInput *pin)
 //! \brief Calculate L1 errors in Sod (hydro) and RJ2a (MHD) tests
 //========================================================================================
@@ -80,7 +94,7 @@ void Mesh::UserWorkAfterLoop(ParameterInput *pin) {
     Real xrm = (0.60588 - 1.0/std::sqrt(PI*1.4903))*tlim;
     Real xfm = (1.2 - 2.3305/1.08)*tlim;
     Real gm1;
-    if (!GENERAL_EOS) gm1 = pmb->peos->GetGamma() - 1.0;
+    if (!(GENERAL_EOS) && !(PLANETARY_EOS)) gm1 = pmb->peos->GetGamma() - 1.0;
     for (int k=pmb->ks; k<=pmb->ke; k++) {
       for (int j=pmb->js; j<=pmb->je; j++) {
         for (int i=pmb->is; i<=pmb->ie; i++) {
@@ -330,17 +344,20 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     ATHENA_ERROR(msg);
   }
 
-  // Parse left state read from input file: dl,ul,vl,wl,[pl]
+  // Parse left state read from input file: dl,ul,vl,wl,[pl/el]
   Real wl[NHYDRO+NFIELD];
   wl[IDN] = pin->GetReal("problem","dl");
   wl[IVX] = pin->GetReal("problem","ul");
   wl[IVY] = pin->GetReal("problem","vl");
   wl[IVZ] = pin->GetReal("problem","wl");
   if (NON_BAROTROPIC_EOS) {
-    if (pin->DoesParameterExist("problem","Tl"))
+    if (pin->DoesParameterExist("problem","Tl")) {
       wl[IPR] = press(wl[IDN], pin->GetReal("problem","Tl"));
-    else
+    } else if (pin->DoesParameterExist("problem","el")) {
+      wl[IEN] = pin->GetReal("problem","el");
+    } else {
       wl[IPR] = pin->GetReal("problem","pl");
+    }
   }
   if (MAGNETIC_FIELDS_ENABLED) {
     wl[NHYDRO  ] = pin->GetReal("problem","bxl");
@@ -348,17 +365,20 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     wl[NHYDRO+2] = pin->GetReal("problem","bzl");
   }
 
-  // Parse right state read from input file: dr,ur,vr,wr,[pr]
+  // Parse right state read from input file: dr,ur,vr,wr,[pr/er]
   Real wr[NHYDRO+NFIELD];
   wr[IDN] = pin->GetReal("problem","dr");
   wr[IVX] = pin->GetReal("problem","ur");
   wr[IVY] = pin->GetReal("problem","vr");
   wr[IVZ] = pin->GetReal("problem","wr");
   if (NON_BAROTROPIC_EOS) {
-    if (pin->DoesParameterExist("problem","Tr"))
+    if (pin->DoesParameterExist("problem","Tr")) {
       wr[IPR] = press(wr[IDN], pin->GetReal("problem","Tr"));
-    else
+    } else if (pin->DoesParameterExist("problem","er")) {
+      wr[IEN] = pin->GetReal("problem","er");
+    } else {
       wr[IPR] = pin->GetReal("problem","pr");
+    }
   }
   if (MAGNETIC_FIELDS_ENABLED) {
     wr[NHYDRO  ] = pin->GetReal("problem","bxr");
@@ -382,6 +402,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
               if (NON_BAROTROPIC_EOS) {
                 if (GENERAL_EOS) {
                   phydro->u(IEN,k,j,i) = peos->EgasFromRhoP(wl[IDN], wl[IPR]);
+                } else if (PLANETARY_EOS) {
+                  phydro->u(IEN,k,j,i) = wl[IDN]*wl[IEN];
                 } else {
                   phydro->u(IEN,k,j,i) = wl[IPR]/(peos->GetGamma() - 1.0);
                 }
@@ -396,6 +418,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
               if (NON_BAROTROPIC_EOS) {
                 if (GENERAL_EOS) {
                   phydro->u(IEN,k,j,i) = peos->EgasFromRhoP(wr[IDN], wr[IPR]);
+                } else if (PLANETARY_EOS) {
+                  phydro->u(IEN,k,j,i) = wr[IDN]*wr[IEN];
                 } else {
                   phydro->u(IEN,k,j,i) = wr[IPR]/(peos->GetGamma() - 1.0);
                 }
@@ -420,6 +444,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
               if (NON_BAROTROPIC_EOS) {
                 if (GENERAL_EOS) {
                   phydro->u(IEN,k,j,i) = peos->EgasFromRhoP(wl[IDN], wl[IPR]);
+                } else if (PLANETARY_EOS) {
+                  phydro->u(IEN,k,j,i) = wl[IDN]*wl[IEN];
                 } else {
                   phydro->u(IEN,k,j,i) = wl[IPR]/(peos->GetGamma() - 1.0);
                 }
@@ -436,6 +462,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
               if (NON_BAROTROPIC_EOS) {
                 if (GENERAL_EOS) {
                   phydro->u(IEN,k,j,i) = peos->EgasFromRhoP(wr[IDN], wr[IPR]);
+                } else if (PLANETARY_EOS) {
+                  phydro->u(IEN,k,j,i) = wr[IDN]*wr[IEN];
                 } else {
                   phydro->u(IEN,k,j,i) = wr[IPR]/(peos->GetGamma() - 1.0);
                 }
@@ -461,6 +489,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
               if (NON_BAROTROPIC_EOS) {
                 if (GENERAL_EOS) {
                   phydro->u(IEN,k,j,i) = peos->EgasFromRhoP(wl[IDN], wl[IPR]);
+                } else if (PLANETARY_EOS) {
+                  phydro->u(IEN,k,j,i) = wl[IDN]*wl[IEN];
                 } else {
                   phydro->u(IEN,k,j,i) = wl[IPR]/(peos->GetGamma() - 1.0);
                 }
@@ -479,6 +509,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
               if (NON_BAROTROPIC_EOS) {
                 if (GENERAL_EOS) {
                   phydro->u(IEN,k,j,i) = peos->EgasFromRhoP(wr[IDN], wr[IPR]);
+                } else if (PLANETARY_EOS) {
+                  phydro->u(IEN,k,j,i) = wr[IDN]*wr[IEN];
                 } else {
                   phydro->u(IEN,k,j,i) = wr[IPR]/(peos->GetGamma() - 1.0);
                 }
@@ -566,6 +598,28 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
           for (int i=is; i<=ie; ++i) {
             pscalars->s(n,k,j,i) = 1.0/scalar_norm*phydro->u(IDN,k,j,i);
           }
+        }
+      }
+    }
+  }
+  return;
+}
+
+//========================================================================================
+//! \fn void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin)
+//! \brief Output pressure and sound speed if working with planetary EOS
+//========================================================================================
+
+void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
+  if (PLANETARY_EOS) {
+    for (int k=ks; k<=ke; ++k) {
+      for (int j=js; j<=je; ++j) {
+        for (int i=is; i<=ie; ++i) {
+            user_out_var(0,k,j,i) = peos->PresFromRhoEs(phydro->w(IDN,k,j,i),
+                                                        phydro->w(IEN,k,j,i));
+            user_out_var(1,k,j,i) = std::sqrt(peos->AsqFromRhoEs(phydro->w(IDN,k,j,i),
+                                                                 phydro->w(IEN,k,j,i)));
+
         }
       }
     }

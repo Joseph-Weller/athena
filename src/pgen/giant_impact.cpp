@@ -34,10 +34,10 @@ Real njeans;
 Real m_refine;
 }  // namespace
 
-Real vector_pot(int component,
-                Real my_x1, Real my_x2, Real my_x3,
-                Real x1c, Real x2c, Real x3c,
-                Real I0, Real r0, Real rsurf, Real c, Real angle);
+Real vector_potential(int component,
+                      Real my_x1, Real my_x2, Real my_x3,
+                      Real x1c, Real x2c, Real x3c,
+                      Real I0, Real r0, Real rsurf, Real c, Real angle);
 
 int JeansCondition(MeshBlock *pmb);
 void NoInflowInnerX1(MeshBlock *pmb, Coordinates *pco,
@@ -98,11 +98,10 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   return;
 }
 
-void MeshBlock::InitUserMeshBlockData(ParameterInput *pin)
-    {
-      AllocateUserOutputVariables(1);
-      return;
-    }
+void MeshBlock::InitUserMeshBlockData(ParameterInput *pin) {
+  AllocateUserOutputVariables(1);
+  return;
+}
 
 //========================================================================================
 //! \fn void MeshBlock::ProblemGenerator(ParameterInput *pin)
@@ -150,7 +149,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   Real rad_max_2 = std::cbrt((PI/4.0)*(mass_2/dc_2));
   Real pc_1 = (2.0*gconst/PI)*SQR(dc_1*rad_max_1);
   Real pc_2 = (2.0*gconst/PI)*SQR(dc_2*rad_max_2);
-  
+
   //input parameters for atmoshere merger and extent
   Real atm_merge = pin->GetOrAddReal("problem", "atm_merge", 0.03);
   Real atm_ext = pin->GetOrAddReal("problem", "atm_ext", 0.3);
@@ -227,7 +226,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     a1.NewAthenaArray(nx3,nx2,nx1);
     a2.NewAthenaArray(nx3,nx2,nx1);
     a3.NewAthenaArray(nx3,nx2,nx1);
-    
+
     Real x1c_target   = delx_1;
     Real x2c_target   = dely_1;
     Real x3c_target   = 0.0;
@@ -264,39 +263,39 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         Real x1l = pcoord->x1f(i)+0.25*pcoord->dx1f(i);
         Real x1r = pcoord->x1f(i)+0.75*pcoord->dx1f(i);
 
-        a1_target   = 0.5*(vector_pot(X1DIR,
-                                      x1l, pcoord->x2f(j), pcoord->x3f(k),
-                                      x1c_target, x2c_target, x3c_target,
-                                      I0_target, r0_target,
-                                      rsurf_target, c, angle_target) +
-                           vector_pot(X1DIR,
-                                      x1r, pcoord->x2f(j), pcoord->x3f(k),
-                                      x1c_target, x2c_target, x3c_target,
-                                      I0_target, r0_target,
-                                      rsurf_target, c, angle_target));
+        a1_target   = 0.5*(vector_potential(X1DIR,
+                                            x1l, pcoord->x2f(j), pcoord->x3f(k),
+                                            x1c_target, x2c_target, x3c_target,
+                                            I0_target, r0_target,
+                                            rsurf_target, c, angle_target) +
+                           vector_potential(X1DIR,
+                                            x1r, pcoord->x2f(j), pcoord->x3f(k),
+                                            x1c_target, x2c_target, x3c_target,
+                                            I0_target, r0_target,
+                                            rsurf_target, c, angle_target));
 
-        a1_impactor   = 0.5*(vector_pot(X1DIR,
-                                        x1l, pcoord->x2f(j), pcoord->x3f(k),
-                                        x1c_impactor, x2c_impactor, x3c_impactor,
-                                        I0_impactor, r0_impactor,
-                                        rsurf_impactor, c, angle_impactor) +
-                             vector_pot(X1DIR,
-                                        x1r, pcoord->x2f(j), pcoord->x3f(k),
-                                        x1c_impactor, x2c_impactor, x3c_impactor,
-                                        I0_impactor, r0_impactor,
-                                        rsurf_impactor, c, angle_impactor));
+        a1_impactor   = 0.5*(vector_potential(X1DIR,
+                                              x1l, pcoord->x2f(j), pcoord->x3f(k),
+                                              x1c_impactor, x2c_impactor, x3c_impactor,
+                                              I0_impactor, r0_impactor,
+                                              rsurf_impactor, c, angle_impactor) +
+                             vector_potential(X1DIR,
+                                              x1r, pcoord->x2f(j), pcoord->x3f(k),
+                                              x1c_impactor, x2c_impactor, x3c_impactor,
+                                              I0_impactor, r0_impactor,
+                                              rsurf_impactor, c, angle_impactor));
       } else {
-        a1_target   = vector_pot(X1DIR,
-                                 pcoord->x1v(i), pcoord->x2f(j), pcoord->x3f(k),
-                                 x1c_target, x2c_target, x3c_target,
-                                 I0_target, r0_target,
-                                 rsurf_target, c, angle_target);
+        a1_target   = vector_potential(X1DIR,
+                                       pcoord->x1v(i), pcoord->x2f(j), pcoord->x3f(k),
+                                       x1c_target, x2c_target, x3c_target,
+                                       I0_target, r0_target,
+                                       rsurf_target, c, angle_target);
 
-        a1_impactor = vector_pot(X1DIR,
-                                 pcoord->x1v(i), pcoord->x2f(j), pcoord->x3f(k),
-                                 x1c_impactor, x2c_impactor, x3c_impactor,
-                                 I0_impactor, r0_impactor,
-                                 rsurf_impactor, c, angle_impactor);
+        a1_impactor = vector_potential(X1DIR,
+                                       pcoord->x1v(i), pcoord->x2f(j), pcoord->x3f(k),
+                                       x1c_impactor, x2c_impactor, x3c_impactor,
+                                       I0_impactor, r0_impactor,
+                                       rsurf_impactor, c, angle_impactor);
       }
 
       if ((pbval->nblevel[1][1][0]>level && i==is)
@@ -311,40 +310,40 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         Real x2l = pcoord->x2f(j)+0.25*pcoord->dx2f(j);
         Real x2r = pcoord->x2f(j)+0.75*pcoord->dx2f(j);
 
-        a2_target   = 0.5*(vector_pot(X2DIR,
-                                      pcoord->x1f(i), x2l, pcoord->x3f(k),
-                                      x1c_target, x2c_target, x3c_target,
-                                      I0_target, r0_target,
-                                      rsurf_target, c, angle_target) +
-                           vector_pot(X2DIR,
-                                      pcoord->x1f(i), x2r, pcoord->x3f(k),
-                                      x1c_target, x2c_target, x3c_target,
-                                      I0_target, r0_target,
-                                      rsurf_target, c, angle_target));
+        a2_target   = 0.5*(vector_potential(X2DIR,
+                                            pcoord->x1f(i), x2l, pcoord->x3f(k),
+                                            x1c_target, x2c_target, x3c_target,
+                                            I0_target, r0_target,
+                                            rsurf_target, c, angle_target) +
+                           vector_potential(X2DIR,
+                                            pcoord->x1f(i), x2r, pcoord->x3f(k),
+                                            x1c_target, x2c_target, x3c_target,
+                                            I0_target, r0_target,
+                                            rsurf_target, c, angle_target));
 
-        a2_impactor   = 0.5*(vector_pot(X2DIR,
-                                        pcoord->x1f(i), x2l, pcoord->x3f(k),
-                                        x1c_impactor, x2c_impactor, x3c_impactor,
-                                        I0_impactor, r0_impactor,
-                                        rsurf_impactor, c, angle_impactor) +
-                             vector_pot(X2DIR,
-                                        pcoord->x1f(i), x2r, pcoord->x3f(k),
-                                        x1c_impactor, x2c_impactor, x3c_impactor,
-                                        I0_impactor, r0_impactor,
-                                        rsurf_impactor, c, angle_impactor));
+        a2_impactor   = 0.5*(vector_potential(X2DIR,
+                                              pcoord->x1f(i), x2l, pcoord->x3f(k),
+                                              x1c_impactor, x2c_impactor, x3c_impactor,
+                                              I0_impactor, r0_impactor,
+                                              rsurf_impactor, c, angle_impactor) +
+                             vector_potential(X2DIR,
+                                              pcoord->x1f(i), x2r, pcoord->x3f(k),
+                                              x1c_impactor, x2c_impactor, x3c_impactor,
+                                              I0_impactor, r0_impactor,
+                                              rsurf_impactor, c, angle_impactor));
 
       } else {
-        a2_target   = vector_pot(X2DIR,
-                                 pcoord->x1f(i), pcoord->x2v(j), pcoord->x3f(k),
-                                 x1c_target, x2c_target, x3c_target,
-                                 I0_target, r0_target,
-                                 rsurf_target, c, angle_target);
+        a2_target   = vector_potential(X2DIR,
+                                       pcoord->x1f(i), pcoord->x2v(j), pcoord->x3f(k),
+                                       x1c_target, x2c_target, x3c_target,
+                                       I0_target, r0_target,
+                                       rsurf_target, c, angle_target);
 
-        a2_impactor = vector_pot(X2DIR,
-                                 pcoord->x1f(i), pcoord->x2v(j), pcoord->x3f(k),
-                                 x1c_impactor, x2c_impactor, x3c_impactor,
-                                 I0_impactor, r0_impactor,
-                                 rsurf_impactor, c, angle_impactor);
+        a2_impactor = vector_potential(X2DIR,
+                                       pcoord->x1f(i), pcoord->x2v(j), pcoord->x3f(k),
+                                       x1c_impactor, x2c_impactor, x3c_impactor,
+                                       I0_impactor, r0_impactor,
+                                       rsurf_impactor, c, angle_impactor);
       }
 
       if ((pbval->nblevel[1][1][0]>level && i==is)
@@ -359,41 +358,39 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         Real x3l = pcoord->x3f(k)+0.25*pcoord->dx3f(k);
         Real x3r = pcoord->x3f(k)+0.75*pcoord->dx3f(k);
 
-        a3_target   = 0.5*(vector_pot(X3DIR,
-                                      pcoord->x1f(i), pcoord->x2f(j), x3l,
-                                      x1c_target, x2c_target, x3c_target,
-                                      I0_target, r0_target,
-                                      rsurf_target, c, angle_target) +
-                           vector_pot(X3DIR,
-                                      pcoord->x1f(i), pcoord->x2f(j), x3r,
-                                      x1c_target, x2c_target, x3c_target,
-                                      I0_target, r0_target,
-                                      rsurf_target, c, angle_target));
+        a3_target   = 0.5*(vector_potential(X3DIR,
+                                            pcoord->x1f(i), pcoord->x2f(j), x3l,
+                                            x1c_target, x2c_target, x3c_target,
+                                            I0_target, r0_target,
+                                            rsurf_target, c, angle_target) +
+                           vector_potential(X3DIR,
+                                            pcoord->x1f(i), pcoord->x2f(j), x3r,
+                                            x1c_target, x2c_target, x3c_target,
+                                            I0_target, r0_target,
+                                            rsurf_target, c, angle_target));
 
-        a3_impactor   = 0.5*(vector_pot(X3DIR,
-                                        pcoord->x1f(i), pcoord->x2f(j), x3l,
-                                        x1c_impactor, x2c_impactor, x3c_impactor,
-                                        I0_impactor, r0_impactor,
-                                        rsurf_impactor, c, angle_impactor) +
-                             vector_pot(X3DIR,
-                                        pcoord->x1f(i), pcoord->x2f(j), x3r,
-                                        x1c_impactor, x2c_impactor, x3c_impactor,
-                                        I0_impactor, r0_impactor,
-                                        rsurf_impactor, c, angle_impactor));
-
+        a3_impactor   = 0.5*(vector_potential(X3DIR,
+                                              pcoord->x1f(i), pcoord->x2f(j), x3l,
+                                              x1c_impactor, x2c_impactor, x3c_impactor,
+                                              I0_impactor, r0_impactor,
+                                              rsurf_impactor, c, angle_impactor) +
+                             vector_potential(X3DIR,
+                                              pcoord->x1f(i), pcoord->x2f(j), x3r,
+                                              x1c_impactor, x2c_impactor, x3c_impactor,
+                                              I0_impactor, r0_impactor,
+                                              rsurf_impactor, c, angle_impactor));
       } else {
-        a3_target   = vector_pot(X3DIR,
-                                 pcoord->x1f(i), pcoord->x2f(j), pcoord->x3v(k),
-                                 x1c_target, x2c_target, x3c_target,
-                                 I0_target, r0_target,
-                                 rsurf_target, c, angle_target);
+        a3_target   = vector_potential(X3DIR,
+                                       pcoord->x1f(i), pcoord->x2f(j), pcoord->x3v(k),
+                                       x1c_target, x2c_target, x3c_target,
+                                       I0_target, r0_target,
+                                       rsurf_target, c, angle_target);
 
-        a3_impactor = vector_pot(X3DIR,
-                                 pcoord->x1f(i), pcoord->x2f(j), pcoord->x3v(k),
-                                 x1c_impactor, x2c_impactor, x3c_impactor,
-                                 I0_impactor, r0_impactor,
-                                 rsurf_impactor, c, angle_impactor);
-
+        a3_impactor = vector_potential(X3DIR,
+                                       pcoord->x1f(i), pcoord->x2f(j), pcoord->x3v(k),
+                                       x1c_impactor, x2c_impactor, x3c_impactor,
+                                       I0_impactor, r0_impactor,
+                                       rsurf_impactor, c, angle_impactor);
       }
 
       a1(k,j,i) = a1_target + a1_impactor;
@@ -434,13 +431,15 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     }
 
     for (int k=ks; k<=ke; k++) {
-    for (int j=js; j<=je; j++) {
-    for (int i=is; i<=ie; i++) {
-      phydro->u(IEN,k,j,i) += 0.5*
+      for (int j=js; j<=je; j++) {
+        for (int i=is; i<=ie; i++) {
+          phydro->u(IEN,k,j,i) += 0.5*
                             (SQR(0.5*(pfield->b.x1f(k,j,i)+pfield->b.x1f(k  ,j  ,i+1)))
                             +SQR(0.5*(pfield->b.x2f(k,j,i)+pfield->b.x2f(k  ,j+1,i  )))
                             +SQR(0.5*(pfield->b.x3f(k,j,i)+pfield->b.x3f(k+1,j  ,i  ))));
-    }}}
+        }
+      }
+    }
 
     a1.DeleteAthenaArray();
     a2.DeleteAthenaArray();
@@ -448,56 +447,56 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   }
 }
 
-void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin){
-  AthenaArray<Real> face1, face2p, face2m, face3p, face3m;
+void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
+  AthenaArray<Real> face1, face2p, face2m, face3p, face3m, vol;
   FaceField &b = pfield->b;
 
-  face1.NewAthenaArray((ie-is)+2*NGHOST+2);
+  face1.NewAthenaArray ((ie-is)+2*NGHOST+2);
   face2p.NewAthenaArray((ie-is)+2*NGHOST+1);
   face2m.NewAthenaArray((ie-is)+2*NGHOST+1);
   face3p.NewAthenaArray((ie-is)+2*NGHOST+1);
   face3m.NewAthenaArray((ie-is)+2*NGHOST+1);
-  for(int k=ks; k<=ke; k++) {
-    for(int j=js; j<=je; j++) {
-      pcoord->Face1Area(k,   j,   is, ie+1, face1);
-      pcoord->Face2Area(k,   j+1, is, ie,   face2p);
-      pcoord->Face2Area(k,   j,   is, ie,   face2m);
-      pcoord->Face3Area(k+1, j,   is, ie,   face3p);
-      pcoord->Face3Area(k,   j,   is, ie,   face3m);
-      for(int i=is; i<=ie; i++) {
-        user_out_var(0,k,j,i) = (face1(i+1)*b.x1f(k,j,i+1)-face1(i)*b.x1f(k,j,i)
-              +face2p(i)*b.x2f(k,j+1,i)-face2m(i)*b.x2f(k,j,i)
-              +face3p(i)*b.x3f(k+1,j,i)-face3m(i)*b.x3f(k,j,i));
+  vol.NewAthenaArray   ((ie-is)+2*NGHOST+1);
+  for (int k=ks; k<=ke; ++k) {
+    for (int j=js; j<=je; ++j) {
+      pcoord->Face1Area (k,   j,   is, ie+1, face1);
+      pcoord->Face2Area (k,   j+1, is, ie,   face2p);
+      pcoord->Face2Area (k,   j,   is, ie,   face2m);
+      pcoord->Face3Area (k+1, j,   is, ie,   face3p);
+      pcoord->Face3Area (k,   j,   is, ie,   face3m);
+      pcoord->CellVolume(k,   j,   is, ie,   vol);
+      for (int i=is; i<=ie; ++i) {
+        user_out_var(0,k,j,i) = (face1 (i+1)*b.x1f(k,j,i+1)-face1 (i)*b.x1f(k,j,i) +
+                                 face2p(i  )*b.x2f(k,j+1,i)-face2m(i)*b.x2f(k,j,i) +
+                                 face3p(i  )*b.x3f(k+1,j,i)-face3m(i)*b.x3f(k,j,i));
+        user_out_var(0,k,j,i) /= vol(i);
       }
     }
   }
 }
 
-Real vector_pot(int component,
-                Real my_x1, Real my_x2, Real my_x3,
-                Real x1c, Real x2c, Real x3c,
-                Real I0, Real r0, Real rsurf, Real c, Real angle) {
+// computes Cartesian components of rotated dipole vector potential A_\phi
+Real vector_potential(int component,
+                      Real my_x1, Real my_x2, Real my_x3,
+                      Real x1c, Real x2c, Real x3c,
+                      Real I0, Real r0, Real rsurf, Real c, Real angle) {
 
   // rotation
   Real x_rot = my_x1-x1c;
   Real y_rot = (my_x2-x2c)*std::cos(angle) + (my_x3-x3c)*std::sin(angle);
   Real z_rot = (my_x3-x3c)*std::cos(angle) - (my_x2-x2c)*std::sin(angle);
 
-  Real r_rot_SQR = std::pow(x_rot, 2.) + std::pow(y_rot, 2.) + std::pow(z_rot, 2.);
-  Real r0_SQR = std::pow(r0, 2.);
-  Real wbar_SQR = std::pow(x_rot, 2.) + std::pow(y_rot, 2.);
+  // intermediate quantities
+  Real r_rot_sq = std::pow(x_rot, 2.) + std::pow(y_rot, 2.) + std::pow(z_rot, 2.);
+  Real wbar_sq  = std::pow(x_rot, 2.) + std::pow(y_rot, 2.);
+  Real r0_sq    = std::pow(r0, 2.);
 
-  Real a_val = (I0 * PI*r0_SQR * (1. + (15.*r0_SQR * (r0_SQR + wbar_SQR)) /
-                         (8.*std::pow(r0_SQR + r_rot_SQR, 2.)))) /
-                       (c * std::pow(r0_SQR + r_rot_SQR, 1.5));
-  
+  // evaluate three components of Cartesian vector potential
+  Real a_val = (I0*PI*r0_sq*(1. + (15.*r0_sq*(r0_sq + wbar_sq)) /
+                (8.*std::pow(r0_sq + r_rot_sq, 2.))))/(c*std::pow(r0_sq + r_rot_sq, 1.5));
   Real ax_rot = -1. * y_rot * a_val;
-
   Real ay_rot = x_rot * a_val;
-
   Real az_rot = 0;
-
-  // vector potential
   if (component == X1DIR) {
     return ax_rot;
   } else if (component == X2DIR) {
@@ -519,12 +518,12 @@ int JeansCondition(MeshBlock *pmb) {
   for (int k=pmb->ks-NGHOST; k<=pmb->ke+NGHOST; ++k) {
     for (int j=pmb->js-NGHOST; j<=pmb->je+NGHOST; ++j) {
       for (int i=pmb->is-NGHOST; i<=pmb->ie+NGHOST; ++i) {
-	//Real dxi = pmb->pcoord->dx1f(i);
-	//Real vol = dxi*dxi*dxi
+	      // Real dxi = pmb->pcoord->dx1f(i);
+	      // Real vol = dxi*dxi*dxi
         Real nj = fac*std::sqrt(pmb->phydro->w(IPR,k,j,i))/pmb->phydro->w(IDN,k,j,i);
         njmin = std::min(njmin, nj);
-	Real m_amount = vol*pmb->phydro->u(IDN,k,j,i);
-	mass = std::max(mass, m_amount);
+	      Real m_amount = vol*pmb->phydro->u(IDN,k,j,i);
+	      mass = std::max(mass, m_amount);
       }
     }
   }
