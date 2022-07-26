@@ -3,8 +3,8 @@
 // Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
 // Licensed under the 3-clause BSD License, see LICENSE file for details
 //======================================================================================
-//! \file ideal.cpp
-//! \brief implements ideal EOS in general EOS framework, mostly for debuging
+//! \file planetary_tillotson.cpp
+//! \brief implements Tillotson EOS in planetary EOS framework
 //======================================================================================
 
 // C headers

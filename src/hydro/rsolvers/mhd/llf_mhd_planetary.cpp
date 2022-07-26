@@ -3,7 +3,7 @@
 // Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
 // Licensed under the 3-clause BSD License, see LICENSE file for details
 //========================================================================================
-//! \file llf_mhd.cpp
+//! \file llf_mhd_planetary.cpp
 //! \brief Local Lax Friedrichs (LLF) Riemann solver for MHD
 //!
 //! Computes 1D fluxes using the LLF Riemann solver, also known as Rusanov's method.

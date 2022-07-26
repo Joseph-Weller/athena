@@ -11,7 +11,6 @@
 //!
 //! Real EquationOfState::PresFromRhoEs(Real rho, Real egas)
 //! Real EquationOfState::AsqFromRhoEs(Real rho, Real pres)
-//! void EquationOfState::InitEosConstants(ParameterInput *pin) // can be empty
 
 
 // C headers
