@@ -3,8 +3,8 @@
 // Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
 // Licensed under the 3-clause BSD License, see LICENSE file for details
 //========================================================================================
-//! \file noop.cpp
-//! \brief Implements no-op versions of the general eos functions
+//! \file planetary_noop.cpp
+//! \brief Implements no-op versions of the planetary eos functions
 
 // C headers
 
@@ -19,31 +19,17 @@
 // Athena++ headers
 #include "../eos.hpp"
 
-Real EquationOfState::PresFromRhoEg(Real rho, Real egas) {
+Real EquationOfState::PresFromRhoEs(Real rho, Real espec) {
   std::stringstream msg;
-  msg << "### FATAL ERROR in EquationOfState::PresFromRhoEg" << std::endl
+  msg << "### FATAL ERROR in EquationOfState::PresFromRhoEs" << std::endl
       << "Function should not be called with current configuration." << std::endl;
   ATHENA_ERROR(msg);
   return -1.0;
 }
-Real EquationOfState::EgasFromRhoP(Real rho, Real pres) {
+Real EquationOfState::AsqFromRhoEs(Real rho, Real espec) {
   std::stringstream msg;
-  msg << "### FATAL ERROR in EquationOfState::EgasFromRhoP" << std::endl
+  msg << "### FATAL ERROR in EquationOfState::AsqFromRhoEs" << std::endl
       << "Function should not be called with current configuration." << std::endl;
   ATHENA_ERROR(msg);
   return -1.0;
-}
-Real EquationOfState::AsqFromRhoP(Real rho, Real pres) {
-  std::stringstream msg;
-  msg << "### FATAL ERROR in EquationOfState::AsqFromRhoP" << std::endl
-      << "Function should not be called with current configuration." << std::endl;
-  ATHENA_ERROR(msg);
-  return -1.0;
-}
-
-//----------------------------------------------------------------------------------------
-//! \fn void EquationOfState::InitEosConstants(ParameterInput* pin)
-//! \brief Initialize constants for EOS
-void EquationOfState::InitEosConstants(ParameterInput *pin) {
-  return;
 }
