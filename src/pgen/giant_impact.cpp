@@ -34,12 +34,13 @@ Real njeans;
 Real m_refine;
 }  // namespace
 
+int JeansCondition(MeshBlock *pmb);
+
 Real vector_potential(int component,
                       Real my_x1, Real my_x2, Real my_x3,
                       Real x1c, Real x2c, Real x3c,
                       Real I0, Real r0, Real rsurf, Real c, Real angle);
 
-int JeansCondition(MeshBlock *pmb);
 void NoInflowInnerX1(MeshBlock *pmb, Coordinates *pco,
                      AthenaArray<Real> &a,
                      FaceField &b, Real time, Real dt,
@@ -447,6 +448,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   }
 }
 
+// Compute divB for user output variable
 void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin) {
   AthenaArray<Real> face1, face2p, face2m, face3p, face3m, vol;
   FaceField &b = pfield->b;
