@@ -358,7 +358,7 @@ if args['eos'][:10] == 'planetary/':
                          + 'Planetary EOS is incompatible with relativity')
     if args['flux'] not in ['llf']:
         raise SystemExit('### CONFIGURE ERROR: '
-                         + 'General EOS is incompatible with flux ' + args['flux'])
+                         + 'Planetary EOS is incompatible with flux ' + args['flux'])
 
 # --- Step 3. Set definitions and Makefile options based on above argument
 
