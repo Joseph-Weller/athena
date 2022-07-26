@@ -390,7 +390,7 @@ elif args['eos'] == 'adiabatic':
     definitions['NHYDRO_VARIABLES'] = '5'
 elif args['eos'][:8] == 'general/':
     definitions['GENERAL_EOS'] = '1'
-    makefile_options['EOS_FILE'] = args['eos'][:10] + 'general_' + args['eos'][10:]
+    makefile_options['EOS_FILE'] = args['eos'][:8] + 'general_' + args['eos'][8:]
     makefile_options['GENERAL_EOS_FILE'] = 'general'
     definitions['NHYDRO_VARIABLES'] = '5'
     if args['eos'] == 'general/eos_table':
