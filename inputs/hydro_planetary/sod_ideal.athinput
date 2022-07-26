@@ -1,7 +1,7 @@
 <comment>
 problem   = Sod's shock tube
 reference = Sod, G.A., JCP 27, pp. 1-31 (1978)
-configure = --prob=shock_tube --eos=planetary/gamma_law
+configure = --prob=shock_tube --eos=planetary/ideal
 
 <job>
 problem_id  = Sod       # problem ID: basename of output filenames
