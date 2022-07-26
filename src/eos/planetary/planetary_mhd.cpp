@@ -44,7 +44,6 @@ EquationOfState::EquationOfState(MeshBlock *pmb, ParameterInput *pin) :
       ATHENA_ERROR(msg);
     }
   }
-  InitEosConstants(pin);
 }
 
 //----------------------------------------------------------------------------------------
