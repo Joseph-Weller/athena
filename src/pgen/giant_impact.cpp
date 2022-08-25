@@ -23,6 +23,7 @@
 #include "../hydro/hydro.hpp"
 #include "../mesh/mesh.hpp"
 #include "../parameter_input.hpp"
+#include "../scalars/scalars.hpp"
 
 #if SELF_GRAVITY_ENABLED != 2
 #error "This problem generator requires Multigrid gravity solver."
@@ -446,6 +447,38 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     a2.DeleteAthenaArray();
     a3.DeleteAthenaArray();
   }
+  constexpr int scalar_norm = NSCALARS > 0 ? NSCALARS : 1.0;
+  if (NSCALARS > 0) {
+    for (int n=0; n<NSCALARS; ++n) {
+      for (int k=ks; k<=ke; ++k) {
+        for (int j=js; j<=je; ++j) {
+          for (int i=is; i<=ie; ++i) {
+            Real x = pcoord->x1v(i);
+            Real y = pcoord->x2v(j);
+            Real z = pcoord->x3v(k);
+            Real rad_1 = std::sqrt(SQR(x-(x0+delx_1)) + SQR(y-(y0+dely_1)) + SQR(z-z0));
+            Real rad_2 = std::sqrt(SQR(x-(x0+delx_2)) + SQR(y-(y0+dely_2)) + SQR(z-z0));
+            if (n < 1) {
+	      if (rad_1 <= rad_max_1*atm_ext) { 
+	        pscalars->s(n,k,j,i) = 1.0/scalar_norm*phydro->u(IDN,k,j,i);
+		//pscalars->s(n,k,j,i) = 1.0/scalar_norm;
+              } else {
+	        pscalars->s(n,k,j,i) = 0.0;
+	      }
+	    } else {
+	      if (rad_2 <= rad_max_2*atm_ext) {
+                pscalars->s(n,k,j,i) = 1.0/scalar_norm*phydro->u(IDN,k,j,i);
+		//pscalars->s(n,k,j,i) = 1.0/scalar_norm;
+              } else {
+                pscalars->s(n,k,j,i) = 0.0;
+              }
+	    }
+	  }
+        }
+      }
+    }
+  }
+
 }
 
 // Compute divB for user output variable

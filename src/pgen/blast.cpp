@@ -32,6 +32,7 @@
 #include "../hydro/hydro.hpp"
 #include "../mesh/mesh.hpp"
 #include "../parameter_input.hpp"
+#include "../scalars/scalars.hpp"
 
 Real threshold;
 
@@ -206,6 +207,39 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
       for (int j=js; j<=je; ++j) {
         for (int i=is; i<=ie; ++i) {
           phydro->u(IEN,k,j,i) += 0.5*b0*b0;
+        }
+      }
+    }
+  }
+  constexpr int scalar_norm = NSCALARS > 0 ? NSCALARS : 1.0;
+  if (NSCALARS > 0) {
+    for (int n=0; n<NSCALARS; ++n) {
+      for (int k=ks; k<=ke; ++k) {
+        for (int j=js; j<=je; ++j) {
+          for (int i=is; i<=ie; ++i) {
+	    Real rad;
+            if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
+              Real x = pcoord->x1v(i);
+              Real y = pcoord->x2v(j);
+              Real z = pcoord->x3v(k);
+              rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
+            } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+              Real x = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+              Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j));
+              Real z = pcoord->x3v(k);
+              rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
+            } else { // if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0)
+              Real x = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3v(k));
+              Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3v(k));
+              Real z = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+              rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
+            }
+            if (rad < rout) {
+              pscalars->s(n,k,j,i) = 1.0/scalar_norm*phydro->u(IDN,k,j,i);
+            } else {
+	      pscalars->s(n,k,j,i) = 0.0;
+            }
+          }
         }
       }
     }
