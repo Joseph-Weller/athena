@@ -146,7 +146,6 @@ MGGravityDriver::~MGGravityDriver() {
 MGGravity::MGGravity(MultigridDriver *pmd, MeshBlock *pmb) : Multigrid(pmd, pmb, 1, 1) {
   btype = BoundaryQuantity::mggrav;
   btypef = BoundaryQuantity::mggrav_f;
-  defscale_ = rdx_*rdx_;
   pmgbval = new MGGravityBoundaryValues(this, mg_block_bcs_);
 }
 
@@ -177,14 +176,11 @@ void MGGravityDriver::Solve(int stage) {
     Multigrid *pmg = *itr;
     // assume all the data are located on the same node
     pmg->LoadSource(pmg->pmy_block_->phydro->u, IDN, NGHOST, four_pi_G_);
-    if (mode_ ==1) // iterative mode - load initial guess
+    if (mode_ == 1) // iterative mode - load initial guess
       pmg->LoadFinestData(pmg->pmy_block_->pgrav->phi, 0, NGHOST);
   }
 
   SetupMultigrid();
-  Real mean_rho = 0.0;
-  if (fsubtract_average_)
-    mean_rho = last_ave_/four_pi_G_;
 
   if (mode_ == 0) {
     SolveFMGCycle();
@@ -276,8 +272,8 @@ void MGGravity::Smooth(AthenaArray<Real> &u, const AthenaArray<Real> &src, int r
 
 //----------------------------------------------------------------------------------------
 //! \fn  void MGGravity::CalculateDefect(AthenaArray<Real> &def,
-//!                      const AthenaArray<Real> &u, const AthenaArray<Real> &src,
-//!                      int rlev, int il, int iu, int jl, int ju, int kl, int ku, bool th)
+//!           const AthenaArray<Real> &u, const AthenaArray<Real> &src, int rlev,
+//!           int il, int iu, int jl, int ju, int kl, int ku, bool th)
 //! \brief Implementation of the Defect calculation
 //!        rlev = relative level from the finest level of this Multigrid block
 
@@ -353,10 +349,12 @@ void MGGravity::CalculateFASRHS(AthenaArray<Real> &src, const AthenaArray<Real> 
 
 
 //----------------------------------------------------------------------------------------
-//! \fn void MGGravityDriver::ProlongateOctetBoundariesFluxCons(AthenaArray<Real> &dst)
+//! \fn void MGGravityDriver::ProlongateOctetBoundariesFluxCons(AthenaArray<Real> &dst,
+//                            AthenaArray<Real> &cbuf, const AthenaArray<bool> &ncoarse)
 //! \brief prolongate octet boundaries using the flux conservation formula
 
-void MGGravityDriver::ProlongateOctetBoundariesFluxCons(AthenaArray<Real> &dst) {
+void MGGravityDriver::ProlongateOctetBoundariesFluxCons(AthenaArray<Real> &dst,
+                      AthenaArray<Real> &cbuf, const AthenaArray<bool> &ncoarse) {
   constexpr Real ot = 1.0/3.0;
   const int ngh = mgroot_->ngh_;
   const AthenaArray<Real> &u = dst;
@@ -364,13 +362,13 @@ void MGGravityDriver::ProlongateOctetBoundariesFluxCons(AthenaArray<Real> &dst) 
 
   // x1face
   for (int ox1=-1; ox1<=1; ox1+=2) {
-    if (ncoarse_[1][1][ox1+1]) {
+    if (ncoarse(1, 1, ox1+1)) {
       int i, fi, fig;
       if (ox1 > 0) i = ngh + 1, fi = ngh + 1, fig = ngh + 2;
       else         i = ngh - 1, fi = ngh,     fig = ngh - 1;
-      Real ccval = cbuf_(0, ck, cj, i);
-      Real gx2c = 0.125*(cbuf_(0, ck, cj+1, i) - cbuf_(0, ck, cj-1, i));
-      Real gx3c = 0.125*(cbuf_(0, ck+1, cj, i) - cbuf_(0, ck-1, cj, i));
+      Real ccval = cbuf(0, ck, cj, i);
+      Real gx2c = 0.125*(cbuf(0, ck, cj+1, i) - cbuf(0, ck, cj-1, i));
+      Real gx3c = 0.125*(cbuf(0, ck+1, cj, i) - cbuf(0, ck-1, cj, i));
       dst(0, l, l, fig) = ot*(2.0*(ccval - gx2c - gx3c) + u(0, l, l, fi));
       dst(0, l, r, fig) = ot*(2.0*(ccval + gx2c - gx3c) + u(0, l, r, fi));
       dst(0, r, l, fig) = ot*(2.0*(ccval - gx2c + gx3c) + u(0, r, l, fi));
@@ -380,13 +378,13 @@ void MGGravityDriver::ProlongateOctetBoundariesFluxCons(AthenaArray<Real> &dst) 
 
   // x2face
   for (int ox2=-1; ox2<=1; ox2+=2) {
-    if (ncoarse_[1][ox2+1][1]) {
+    if (ncoarse(1, ox2+1, 1)) {
       int j, fj, fjg;
       if (ox2 > 0) j = ngh + 1, fj = ngh + 1, fjg = ngh + 2;
       else         j = ngh - 1, fj = ngh,     fjg = ngh - 1;
-      Real ccval = cbuf_(0, ck, j, ci);
-      Real gx1c = 0.125*(cbuf_(0, ck, j, ci+1) - cbuf_(0, ck, j, ci-1));
-      Real gx3c = 0.125*(cbuf_(0, ck+1, j, ci) - cbuf_(0, ck-1, j, ci));
+      Real ccval = cbuf(0, ck, j, ci);
+      Real gx1c = 0.125*(cbuf(0, ck, j, ci+1) - cbuf(0, ck, j, ci-1));
+      Real gx3c = 0.125*(cbuf(0, ck+1, j, ci) - cbuf(0, ck-1, j, ci));
       dst(0, l, fjg, l) = ot*(2.0*(ccval - gx1c - gx3c) + u(0, l, fj, l));
       dst(0, l, fjg, r) = ot*(2.0*(ccval + gx1c - gx3c) + u(0, l, fj, r));
       dst(0, r, fjg, l) = ot*(2.0*(ccval - gx1c + gx3c) + u(0, r, fj, l));
@@ -396,13 +394,13 @@ void MGGravityDriver::ProlongateOctetBoundariesFluxCons(AthenaArray<Real> &dst) 
 
   // x3face
   for (int ox3=-1; ox3<=1; ox3+=2) {
-    if (ncoarse_[ox3+1][1][1]) {
+    if (ncoarse(ox3+1, 1, 1)) {
       int k, fk, fkg;
       if (ox3 > 0) k = ngh + 1, fk = ngh + 1, fkg = ngh + 2;
       else         k = ngh - 1, fk = ngh,     fkg = ngh - 1;
-      Real ccval = cbuf_(0, k, cj, ci);
-      Real gx1c = 0.125*(cbuf_(0, k, cj, ci+1) - cbuf_(0, k, cj, ci-1));
-      Real gx2c = 0.125*(cbuf_(0, k, cj+1, ci) - cbuf_(0, k, cj-1, ci));
+      Real ccval = cbuf(0, k, cj, ci);
+      Real gx1c = 0.125*(cbuf(0, k, cj, ci+1) - cbuf(0, k, cj, ci-1));
+      Real gx2c = 0.125*(cbuf(0, k, cj+1, ci) - cbuf(0, k, cj-1, ci));
       dst(0, fkg, l, l) = ot*(2.0*(ccval - gx1c - gx2c) + u(0, fk, l, l));
       dst(0, fkg, l, r) = ot*(2.0*(ccval + gx1c - gx2c) + u(0, fk, l, r));
       dst(0, fkg, r, l) = ot*(2.0*(ccval - gx1c + gx2c) + u(0, fk, r, l));
