@@ -91,10 +91,16 @@ void EquationOfState::ConservedToPrimitive(
 
         Real pb = 0.5*(SQR(bcc1) + SQR(bcc2) + SQR(bcc3));
         Real ke = 0.5*di*(SQR(u_m1) + SQR(u_m2) + SQR(u_m3));
+	//attempted fix below
+	w_e = di*(u_e - ke - pb);
 
         // apply specific internal energy floor, correct total energy
-        u_e = (w_e > espec_floor_) ? w_e : (w_d*espec_floor_ + ke + pb);
-        u_e = (w_e > espec_floor_) ? w_e : espec_floor_;
+        //u_e = (w_e > espec_floor_) ? w_e : (w_d*espec_floor_ + ke + pb);
+        //attempted fix below
+	u_e = (w_e > espec_floor_) ? u_e : (w_d*espec_floor_ + ke + pb);
+	//u_e = (w_e > espec_floor_) ? w_e : espec_floor_;
+	//attempated fix below
+        w_e = (w_e > espec_floor_) ? w_e : espec_floor_;
       }
     }
   }
@@ -130,7 +136,9 @@ void EquationOfState::PrimitiveToConserved(
         const Real& w_vx = prim(IVX,k,j,i);
         const Real& w_vy = prim(IVY,k,j,i);
         const Real& w_vz = prim(IVZ,k,j,i);
-        const Real& w_p  = prim(IPR,k,j,i);
+        //const Real& w_p  = prim(IPR,k,j,i);
+        // added below line to try to correct error
+	const Real& w_e  = prim(IEN,k,j,i);
 
         const Real& bcc1 = bc(IB1,k,j,i);
         const Real& bcc2 = bc(IB2,k,j,i);
@@ -180,11 +188,17 @@ void EquationOfState::ApplyPrimitiveFloors(AthenaArray<Real> &prim, int k, int j
   Real& w_d  = prim(IDN,i);
   Real& w_e  = prim(IEN,i);
 
+  // added below line to try to correct error
+  //Real& w_p  = prim(IPR,i);
+
   // apply density floor
   w_d = (w_d > density_floor_) ?  w_d : density_floor_;
   // apply pressure floor
-  w_p = (w_e > espec_floor_) ?  w_e : espec_floor_;
+  //w_p = (w_e > espec_floor_) ?  w_e : espec_floor_;
+  //attempted fix below
+  w_e = (w_e > espec_floor_) ?  w_e : espec_floor_;
 
+  //
   return;
 }
 
@@ -198,6 +212,8 @@ void EquationOfState::ApplyPrimitiveConservedFloors(
     int k, int j, int i) {
   Real& w_d  = prim(IDN,k,j,i);
   Real& w_e  = prim(IEN,k,j,i);
+  // added below line to try to correct error
+  //Real& w_p  = prim(IPR,k,j,i);
 
   Real& u_d  = cons(IDN,k,j,i);
   Real& u_e  = cons(IEN,k,j,i);
@@ -213,7 +229,9 @@ void EquationOfState::ApplyPrimitiveConservedFloors(
   Real e_k = 0.5*w_d*(SQR(prim(IVX,k,j,i)) + SQR(prim(IVY,k,j,i)) + SQR(prim(IVZ,k,j,i)));
   // apply pressure floor, correct total energy
   u_e = (w_e > espec_floor_) ? u_e : w_d*espec_floor_ + e_k + pb;
-  w_p = (w_e > espec_floor_) ? w_e : espec_floor_;
+  //w_p = (w_e > espec_floor_) ? w_e : espec_floor_;
+  //attempted fix below
+  w_e = (w_e > espec_floor_) ? w_e : espec_floor_;
 
   return;
 }
