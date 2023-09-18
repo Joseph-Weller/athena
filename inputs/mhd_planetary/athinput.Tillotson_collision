@@ -1,0 +1,112 @@
+<comment>
+problem   = graviationally stable planet for testing tillotson eos
+reference = me
+configure = --prob=stable_planet --grav=mg/fft (-fft)
+
+<job>
+problem_id = giant_impact    # problem ID: basename of output filenames
+
+<output1>
+file_type  = hst        # History data dump
+variable   = cons,uov
+dt         = 200.0       # time increment between outputs
+
+<output2>
+file_type  = hdf5        # Binary data dump
+variable   = cons,p,uov       # variables to be output
+dt         = 882     # time increment between outputs
+x3_slice   = 0.0      # slice through x3=0.0
+ghost_zones= false
+
+<output3>
+file_type  = hdf5     # Binary data dump
+variable   = cons,p,uov      # variables to be output
+dt         = 8820.0  #44100.0     # time increment between outputs
+
+<output4>
+file_type = rst      #restart file
+dt        = 12600.0
+
+<time>
+cfl_number = 0.3        # The Courant, Friedrichs, & Lewy (CFL) Number
+nlim       = -1     # cycle limit
+tlim       = 882000.0     #88200.0 - 1 day   # time limit
+integrator  = rk2       # time integration algorithm
+xorder      = 2         # order of spatial reconstruction
+ncycle_out  = 1         # interval for stdout summary info
+
+<mesh>
+nx1        = 64         # Number of zones in X1-direction
+x1min      = -2.551e10 #-6.378e9 #-2.551e10       # minimum value of X1 (10 earth radii)
+x1max      = 2.551e10 #6.378e9 #2.551e10        # maximum value of X1
+ix1_bc     = user   # inner-X1 boundary flag
+ox1_bc     = user   # outer-X1 boundary flag
+
+nx2        = 64        # Number of zones in X2-direction
+x2min      = -2.551e10 #-6.378e9 #-2.551e10      # minimum value of X2
+x2max      = 2.551e10 #6.378e9 #2.551e10       # maximum value of X2
+ix2_bc     = user   # inner-X2 boundary flag
+ox2_bc     = user   # outer-X2 boundary flag
+
+nx3        = 64         # Number of zones in X3-direction
+x3min      = -2.551e10 #-6.378e9 #-2.551e10       # minimum value of X3
+x3max      = 2.551e10 #6.378e9 #2.551e10        # maximum value of X3
+ix3_bc     = user   # inner-X3 boundary flag
+ox3_bc     = user   # outer-X3 boundary flag
+
+refinement  = adaptive  # Adaptive Mesh Refinement
+numlevel    = 5         # Number of AMR levels
+derefine_count = 5      # Number of Steps
+
+<meshblock>
+nx1        = 16 #16
+nx2        = 16
+nx3        = 16
+
+<gravity>
+mgmode          = FMG        # set the solver mode: FMG or MGI
+threshold       = 0.0        # set the convergence threshold
+ix1_bc          = multipole  # Inner X1 boundary condition
+ox1_bc          = multipole  # Outer X1 boundary condition
+ix2_bc          = multipole  # Inner X2 boundary condition
+ox2_bc          = multipole  # Outer X2 boundary condition
+ix3_bc          = multipole  # Inner X3 boundary condition
+ox3_bc          = multipole  # Outer X3 boundary condition
+mporder         = 4          # order of multipole expansion, 2 or 4
+nodipole        = false      # set true to set dipole to zero
+
+
+<hydro>
+gamma           = 2.0 # gamma = C_p/C_v
+dfloor = 1.0e-10  # density floor
+pfloor = 1.0e-10  # pressure floor
+efloor       = 1.e-1  # specific internal energy floor (in erg/g)
+eceiling     = 1.e15  # specific internal energy ceiling (in erg/g)
+
+<problem>
+#pamb          = 1.0e-9    # ambient pressure
+damb          = 1.0e-9    # ambient density
+eamb          = 1.0e9 #1.0e10    # ambient specific internal energy
+dcent_e         = 6.5       #dcent         = 0.7854    # central density Earth
+ecent_e         = 9.5e10
+r_max_e         = 6.685e8   #r_max       = 1.0    # Maximum radius Earth
+dcent_i         = 5.2       #dcent         = 0.7854    # central density Impactor
+ecent_i         = 1.7e10
+r_max_i         = 4.16e8   #r_max       = 1.0    # Maximum radius Impactor
+
+vx            = 0.0    # Bump x velocity
+vy            = 0.0    # Bump y velocity
+x_disp     = 1.626e9  #2.55      # second polytrope x-axis center offset from middle
+y_disp     = 7.653e8  #1.2      # second polytrope y-axis center offset from middle
+vcoll      = -8.021e5   # collision velocity
+grav_const    = 6.67e-8  #grav_const = 9.81    # gravitational constant value
+njeans     =  1e-7  #64       # Jeans length mumber for AMR
+m_refine      = 3.18e21 #m_refine   = 2.0e-6   # Mass refinement value for AMR
+atm_merge  = 0.02     # percent removed from outer layer of polytrope to begin atmosphere
+atm_ext    = 1.25      # Max radius of atmosphere, should be >1.0, 1.0 is radius of polytrope
+
+c              = 2.9979e10    # speed of light
+I0_impactor    = 2.3680e22    # loop current (for 1 kG field)
+I0_target      = 3.4007e22    # loop current (for 1 kG field)
+angle_target   = 0.0          # angle between target dipole axis and z-axis
+angle_impactor = 90.0         # angle between impactor dipole axis and z-axis
