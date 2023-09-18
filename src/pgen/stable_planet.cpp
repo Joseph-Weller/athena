@@ -30,6 +30,7 @@
 #include "../hydro/hydro.hpp"
 #include "../mesh/mesh.hpp"
 #include "../parameter_input.hpp"
+#include "../scalars/scalars.hpp"
 
 #ifdef MPI_PARALLEL
 #include <mpi.h>
@@ -66,7 +67,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
 void MeshBlock::InitUserMeshBlockData(ParameterInput *pin)
     {
-      AllocateUserOutputVariables(1);
+      AllocateUserOutputVariables(2);
       return;
     }
 
@@ -77,19 +78,105 @@ void MeshBlock::InitUserMeshBlockData(ParameterInput *pin)
 
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   
-  Real R_max = pin->GetReal("problem", "r_max");
+  Real R_max = pin->GetOrAddReal("problem", "r_max", 1.0);
   //std::cout << "R_max " << R_max << std::endl;
-  Real pa   = pin->GetOrAddReal("problem", "pamb", 1.0);
+  //Real pa   = pin->GetOrAddReal("problem", "pamb", 1.0);
+  Real ea   = pin->GetOrAddReal("problem", "eamb", 1.0); 
   Real da   = pin->GetOrAddReal("problem", "damb", 1.0);
   Real dc = pin->GetOrAddReal("problem", "dcent", 1.0);
   Real xvel = pin->GetOrAddReal("problem", "vx", 0.0);
   Real yvel = pin->GetOrAddReal("problem", "vy", 0.0);
-  Real pulse_var = pin->GetOrAddReal("problem", "pulse", 1.0);  
-
+  Real pulse_var = pin->GetOrAddReal("problem", "pulse", 1.0);
+  
   Real gamma = pin->GetReal("hydro","gamma");
   Real gm1 = gamma - 1.0;
   
-  Real pcent = (2*gconst/PI)*dc*dc*R_max*R_max;
+  //Real ecent = pin->GetOrAddReal("problem", "ecent", 1.0); //update to read input
+  Real ecent = pin->GetOrAddReal("problem", "ecent", 1.0);
+  //Real pcent = (2*gconst/PI)*dc*dc*R_max*R_max;
+
+  Real den_stab[10000];
+  Real espec_stab[10000];
+  Real r_store[10000];
+  Real r0 = 0.01;
+  Real krho1 = 0.0;
+  Real krho2 = 0.0;
+  Real kespec1 = 0.0;
+  Real kespec2 = 0.0;
+  Real k1M = 0.0;
+  Real k2M = 0.0;
+  Real cs_2 = 0.0;
+  //Real pres = peos->PresFromRhoEs(den_curr, espec_curr);
+  
+  Real r0_2 = 0.0;
+  Real den_curr = dc;
+  Real espec_curr = ecent;
+  Real dr = R_max/10000;
+  Real drho = 0.0;
+  Real despec = 0.0;
+  Real dM = 0.0;
+  int place = 0;
+  Real M = 0.0;
+  Real pres = peos->PresFromRhoEs(den_curr, espec_curr);
+
+  Real espec_max = 0.0;
+  Real en_max = 0.0;
+  //while (pres >0){
+  while(r0<R_max){
+    den_stab[place] = den_curr;
+    espec_stab[place] = espec_curr;
+    r_store[place]= r0;
+
+    cs_2 = peos->AsqFromRhoEs(den_curr, espec_curr);
+    pres = peos->PresFromRhoEs(den_curr, espec_curr);
+    drho = -1*gconst*M*den_curr/(cs_2*std::pow(r0, 2));
+    despec = (pres/pow(den_curr, 2))*drho;
+    dM = 4*PI*den_curr*pow(r0,2);
+
+    den_curr = den_curr + dr*drho;
+    espec_curr = espec_curr + dr*despec;
+    M = M + dr*dM;
+    r0 = r0+dr;
+    place = place +1;
+
+    //krho1 = den_curr +0.5*dr*drho;
+    //kespec1 = espec_curr +0.5*dr*despec;
+    //k1M = M +0.5*dr*dM;
+    //r0_2 = r0 + 0.5*dr;
+
+    //cs_2 = peos->AsqFromRhoEs(krho1, kespec1);
+    //pres = peos->PresFromRhoEs(krho1, kespec1);
+    //drho = -1*gconst*k1M*krho1/(cs_2*std::pow(r0_2, 2));
+    //despec = (pres/pow(krho1, 2))*drho;
+    //dM = 4*PI*krho1*pow(r0_2,2);
+
+    //den_curr = den_curr + dr*drho;
+    //espec_curr = espec_curr + dr*despec;
+    //M = M + dr*dM;
+    //r0 = r0+dr;
+    //place = place +1;
+  }
+  //std::cout << espec_stab[0] << std::endl;
+  //std::cout << espec_stab[5000] << std::endl;
+
+     //implement rk2 step for tillotson eos
+     //k1 = del_r*func(var_array, r, G, gam)
+     //k2 = del_r*func(var_array+0.5*k1, r+0.5*del_r, G, gam)
+     //cs_2 = til_cs(rho_val, e_val)
+     //Pres = til_pres(rho_val, e_val)
+     //drho = -G*M_val*rho_val/(cs_2*r**2)
+     //despec = fe = (Pres/rho_val**2)*frho
+     //dM = 4*np.pi*rho_val*r**2
+     //den_stab = den_stab + krho2
+     //espec_stab = espec_stab +kespec2
+     //M = M + k2M
+
+  Real atm_merge = pin->GetOrAddReal("problem", "atm_merge", 0.02);
+  Real atm_ext = pin->GetOrAddReal("problem", "atm_ext", 1.25);
+  Real Poly_cut = 1.0-atm_merge;
+  
+  Real orb_vel = std::sqrt(gconst*M/R_max);
+  Real spin = pin->GetOrAddReal("problem", "spin", 0.5);
 
   // get coordinates of center of bump, and convert to Cartesian if necessary
   Real x1_0   = pin->GetOrAddReal("problem", "x1_0", 0.0);
@@ -115,7 +202,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         << "Unrecognized COORDINATE_SYSTEM=" << COORDINATE_SYSTEM << std::endl;
     ATHENA_ERROR(msg);
   }
-
+  int position = 0; 
   // setup uniform ambient medium with spherical over-pressured region
   for (int k=ks; k<=ke; k++) {
     for (int j=js; j<=je; j++) {
@@ -139,38 +226,104 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         }
 
         Real den = da;
-        Real den_pol = 0.0;
-        Real pres = pa;
-        Real pres_pol = 0.0;
+        Real den_spot = 0.0;
+        Real espec = ea;
+        Real espec_spot = 0.0;
         Real momx = 0.0;
         Real momy = 0.0;
         Real kin  = 0.0;
-        if (rad < R_max) {
-          den_pol = dc*R_max/(PI*rad)*std::sin((PI*rad)/R_max);
+	int spot = 0;
+	Real r_spot = 0.0;
+	Real x = pcoord->x1v(i);
+	Real y = pcoord->x2v(j);
+	Real rad_2d = std::sqrt(SQR(x - x0) + SQR(y - y0));
+	//std::cout << position << std::endl;
+        if (rad < R_max*atm_ext) {
+          if (rad < R_max*Poly_cut) {
+	//if (rad < R_max) {
+	    while (r_spot <rad){
+	      r_spot = r_spot + dr;
+	      spot = spot + 1;
+	    }
+	    //std::cout << "here if before error, otherwise it won't print" << std::endl;
+	    //std::cout << "current rad" << rad <<"current rspot"<< r_spot<< std::endl;
+	    if (rad < 0.01){
+	      den_spot = dc;
+              espec_spot = ecent;
+	    } else{
+	      den_spot = den_stab[(spot-1)]+(rad - r_store[(spot-1)])*(den_stab[spot]-den_stab[(spot-1)])/(r_store[spot]-r_store[(spot-1)]);
+	      espec_spot = espec_stab[(spot-1)]+(rad - r_store[(spot-1)])*(espec_stab[spot]-espec_stab[(spot-1)])/(r_store[spot]-r_store[(spot-1)]);
+	      //from stored value interpolate to point
+	    }
+	  //den_stab = 1;
+	  //den_pol = dc*R_max/(PI*rad)*std::sin((PI*rad)/R_max);
           //std::exp(1/(std::pow(rcrit, 2))-1/(std::pow((rad - rcrit), 2)));
-          den = den_pol;
-          //bump function adds density within critical radius
-          pres_pol = pcent*std::pow(R_max/(PI*rad)*std::sin((PI*rad)/R_max),2);
-          pres = pres_pol;
-          momx = den*xvel;
-          momy = den*yvel;
-          kin = 0.5*den*xvel*xvel+0.5*den*yvel*yvel;
-        }
+            den = den_spot;
+            espec = espec_spot+ea;
+	  //std::cout << espec << std::endl;
+	  //bump function adds density within critical radius
+            espec_max = std::max(espec_max, espec);
+	    en_max = std::max(en_max, espec*den);
+	  //pres_pol = pcent*std::pow(R_max/(PI*rad)*std::sin((PI*rad)/R_max),2);
+          //pres = pres_pol;
+	  
+	  //add spin
+	    
+	    xvel = xvel - spin*orb_vel*(y-y0)/(rad_2d+0.00001)*(rad_2d/R_max);
+	    yvel = yvel + spin*orb_vel*(x-x0)/(rad_2d+0.00001)*(rad_2d/R_max);
 
+            momx = den*xvel;
+            momy = den*yvel;
+            kin = 0.5*den*xvel*xvel+0.5*den*yvel*yvel;
+          } else {
+            while (r_spot < R_max*Poly_cut){
+              r_spot = r_spot + dr;
+              spot = spot + 1;
+            }
+            //std::cout << r_spot << std::endl;
+            den = den_stab[(spot-1)] * std::pow(R_max*Poly_cut/rad,15.0);
+
+            espec = espec_stab[(spot-1)] * R_max*Poly_cut/rad;
+            
+	    //add spin
+            xvel = xvel - spin*orb_vel*(y-y0)/(rad_2d+0.00001)*(rad_2d/R_max);
+            yvel = yvel + spin*orb_vel*(x-x0)/(rad_2d+0.00001)*(rad_2d/R_max);
+
+            momx = den*xvel;
+            momy = den*yvel;
+            kin = 0.5*den*xvel*xvel+0.5*den*yvel*yvel;
+          }
+
+        }
+	//std::cout << position << std::endl;
+        position = position +1;
+	//std::cout << kin << std::endl;
+
+	//testing if something is wrong with assignment
+	//phydro->u(IDN,k,j,i) = da;
         phydro->u(IDN,k,j,i) = den;
         phydro->u(IM1,k,j,i) = momx;
         phydro->u(IM2,k,j,i) = momy;
         phydro->u(IM3,k,j,i) = 0.0;
-        if (NON_BAROTROPIC_EOS) {
-          //Real pres = pa;
-          phydro->u(IEN,k,j,i) = (pres/gm1)*pulse_var + kin;
-          if (RELATIVISTIC_DYNAMICS)  // this should only ever be SR with this file
+        phydro->u(IEN,k,j,i) = den*espec*pulse_var + kin;
+	//std::cout << phydro->u(IEN,k,j,i) << std::endl;
+	//std::cout << den*espec << std::endl;
+        if (PLANETARY_EOS){
+	  //std::cout << "here" << std::endl;
+	  //gets here successfully so this isn't issue
+	  //phydro->u(IEN,k,j,i) = den*espec + kin;
+        
+	  //phydro->u(IEN,k,j,i) = den*ea + kin;
+	  if (RELATIVISTIC_DYNAMICS)  // this should only ever be SR with this file
             phydro->u(IEN,k,j,i) += den;
-        }
+	}
       }
     }
   }
-
+ //std::cout << espec_max << std::endl;
+ //std::cout << en_max << std::endl;
+ //std::cout << "here" << std::endl;
+ //gets through initialization
  if (MAGNETIC_FIELDS_ENABLED) {
     AthenaArray<Real> a1, a2, a3;
     Real a1_target, a1_impactor, a2_target, a2_impactor, a3_target, a3_impactor;
@@ -358,12 +511,18 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     a2.DeleteAthenaArray();
     a3.DeleteAthenaArray();
   }
+ //std::cout << "here" << std::endl;
+ //gets here
 }
 
 void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin){
   AthenaArray<Real> face1, face2p, face2m, face3p, face3m;
   FaceField &b = pfield->b;
-  
+   
+  Real en_test = 0.0;
+  Real espec_test = 0.0; 
+  //std::cout << "here" << std::endl;
+
   face1.NewAthenaArray((ie-is)+2*NGHOST+2);
   face2p.NewAthenaArray((ie-is)+2*NGHOST+1);
   face2m.NewAthenaArray((ie-is)+2*NGHOST+1);
@@ -377,12 +536,25 @@ void MeshBlock::UserWorkBeforeOutput(ParameterInput *pin){
       pcoord->Face3Area(k+1, j,   is, ie,   face3p);
       pcoord->Face3Area(k,   j,   is, ie,   face3m);    
       for(int i=is; i<=ie; i++) {
-        user_out_var(0,k,j,i) = (face1(i+1)*b.x1f(k,j,i+1)-face1(i)*b.x1f(k,j,i)
-              +face2p(i)*b.x2f(k,j+1,i)-face2m(i)*b.x2f(k,j,i)
-              +face3p(i)*b.x3f(k+1,j,i)-face3m(i)*b.x3f(k,j,i));
+        //std::cout << b.x2f(k,j,i+1) << std::endl;
+	//user_out_var(0,k,j,i) = (face1(i+1)*b.x1f(k,j,i+1)-face1(i)*b.x1f(k,j,i)
+        //      +face2p(i)*b.x2f(k,j+1,i)-face2m(i)*b.x2f(k,j,i)
+        //      +face3p(i)*b.x3f(k+1,j,i)-face3m(i)*b.x3f(k,j,i));
+	Real den_curr = phydro->u(IDN,k,j,i);
+	Real mom_sqr = SQR(phydro->u(IM1,k,j,i))+SQR(phydro->u(IM2,k,j,i))+SQR(phydro->u(IM3,k,j,i));
+	Real espec_curr = (phydro->u(IEN,k,j,i) - 0.5*(mom_sqr/den_curr))/den_curr;
+	//std::cout << mom_sqr << std::endl;
+	user_out_var(0,k,j,i) = peos->PresFromRhoEs(den_curr, espec_curr);
+	user_out_var(1,k,j,i) = espec_curr;
+	//std::cout << "here" << std::endl;
+	espec_test = std::max(espec_test, espec_curr);
+	en_test = std::max(phydro->u(IEN,k,j,i), en_test);
+        //std::cout << phydro->u(IEN,k,j,i) << std::endl;
       }
     }
   }
+  //std::cout << en_test << std::endl;
+  //std::cout << "here" << std::endl;
 }
 
 Real vector_pot(int component,
@@ -436,15 +608,15 @@ int JeansCondition(MeshBlock *pmb) {
   Real mass  = 0.0;
   const Real dx = pmb->pcoord->dx1f(0);  // assuming uniform cubic cells
   const Real vol = dx*dx*dx;
-  const Real gamma = pmb->peos->GetGamma();
-  const Real fac = 2.0*PI*std::sqrt(gamma)/dx;
+  //const Real gamma = pmb->peos->GetGamma();
+  //const Real fac = 2.0*PI*std::sqrt(gamma)/dx;
   for (int k=pmb->ks-NGHOST; k<=pmb->ke+NGHOST; ++k) {
     for (int j=pmb->js-NGHOST; j<=pmb->je+NGHOST; ++j) {
       for (int i=pmb->is-NGHOST; i<=pmb->ie+NGHOST; ++i) {
         //Real dxi = pmb->pcoord->dx1f(i);
         //Real vol = dxi*dxi*dxi
-        Real nj = fac*std::sqrt(pmb->phydro->w(IPR,k,j,i))/pmb->phydro->w(IDN,k,j,i);
-        njmin = std::min(njmin, nj);
+        //Real nj = fac*std::sqrt(pmb->phydro->w(IPR,k,j,i))/pmb->phydro->w(IDN,k,j,i);
+        //njmin = std::min(njmin, nj);
         Real m_amount = vol*pmb->phydro->u(IDN,k,j,i);
         mass = std::max(mass, m_amount);
       }
@@ -452,8 +624,8 @@ int JeansCondition(MeshBlock *pmb) {
   }
   if (mass > m_refine)
     return 1;
-  if (njmin < njeans)
-    return 1;
+  //if (njmin < njeans)
+    //return 1;
   if (mass < m_refine * 0.1)
     return -1;
   return 0;
