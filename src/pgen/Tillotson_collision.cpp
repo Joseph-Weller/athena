@@ -85,6 +85,11 @@ void NoInflowOuterX3(MeshBlock *pmb, Coordinates *pco,
 void EnrollUserHistoryOutput(int i, HistoryOutputFunc my_func, const char *name,
                                UserHistoryOperation op=UserHistoryOperation::sum);
 
+void Rubber(MeshBlock *pmb, const Real time, const Real dt,
+              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
+              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
+              AthenaArray<Real> &cons_scalar);
+
 //void srcmask(AthenaArray<Real> &src, int is, int ie, int js, int je,
 //             int ks, int ke, const MGCoordinates &coord);
 
@@ -136,7 +141,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   if (mesh_bcs[BoundaryFace::outer_x3] == GetBoundaryFlag("user")) {
     EnrollUserBoundaryFunction(BoundaryFace::outer_x3, NoInflowOuterX3);
   }
-
+  EnrollUserExplicitSourceFunction(Rubber);
   AllocateUserHistoryOutput(3);
   EnrollUserHistoryOutput(0, Mag_En_R, "EBr");
   EnrollUserHistoryOutput(1, Mag_En_phi, "EBphi");
@@ -260,18 +265,23 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   // compute polytrope centers as offset from coordinate origin
   Real x_disp = pin->GetReal("problem", "x_disp");
   Real y_disp = pin->GetReal("problem", "y_disp");
+  Real r_disp = std::sqrt(std::pow(x_disp, 2.0)+std::pow(y_disp, 2.0));
   Real delx_1 = -1.0*(mass_2/mtot)*x_disp;
   Real delx_2 = (mass_1/mtot)*x_disp;
   Real dely_1 = -1.0*(mass_2/mtot)*y_disp;
   Real dely_2 = (mass_1/mtot)*y_disp;
 
   // velocities for each colliding body
-  Real vcoll = pin->GetOrAddReal("problem", "vcoll", 0.0);
+  Real esc_vel = std::sqrt(2*gconst*(mass_1+mass_2)/r_disp);
+  Real vcoll = pin->GetOrAddReal("problem", "vcoll", 0.0)*esc_vel;
   Real delvx_1 = -1.0*(mass_2/mtot)*vcoll;
   Real delvx_2 = (mass_1/mtot)*vcoll;
 
+  Real Radius_Earth = 6.371e8;
+
   Real atm_merge = pin->GetOrAddReal("problem", "atm_merge", 0.03);
-  Real atm_ext = pin->GetOrAddReal("problem", "atm_ext", 0.3);
+  Real atm_ext_e = pin->GetOrAddReal("problem", "atm_ext_e", 1.7);
+  Real atm_ext_i = pin->GetOrAddReal("problem", "atm_ext_i", 1.3);
   Real Poly_cut = 1.0-atm_merge;
 
 
@@ -341,7 +351,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 	//std::cout << position << std::endl;
 	
 	//Earth use rad, _E, delvx_1
-	if (rad < R_max_E*atm_ext) {
+	if (rad < Radius_Earth*atm_ext_e) {
           if (rad < R_max_E*Poly_cut) {
 	    while (r_spot <rad){
 	      r_spot = r_spot + dr_E;
@@ -360,21 +370,24 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 	    //den_stab = 1;
 	    //den_pol = dc*R_max/(PI*rad)*std::sin((PI*rad)/R_max);
             //std::exp(1/(std::pow(rcrit, 2))-1/(std::pow((rad - rcrit), 2)));
-            den = den_spot_E;
-            espec = espec_spot_E+ea;
+            den += den_spot_E;
+            espec += espec_spot_E;
 	  
             momx = den*delvx_1;
             momy = den*yvel;
             kin = 0.5*den*delvx_1*delvx_1+0.5*den*yvel*yvel;
           } else {
-            while (r_spot < R_max_E*Poly_cut){
-              r_spot = r_spot + dr_E;
-              spot = spot + 1;
-            } 
+            //while (r_spot < R_max_E*Poly_cut){
+            //  r_spot = r_spot + dr_E;
+            //  spot = spot + 1;
+            //} 
 	    //std::cout << r_spot << std::endl;
-	    den = den_stab_E[(spot-1)] * std::pow(R_max_E*Poly_cut/rad,15.0);
+	    //den += den_stab_E[(spot-1)] * std::pow(R_max_E*Poly_cut/rad,15.0);
+	    Real targ_amb = 0.1;
+	    den += targ_amb*exp(-1*(rad-R_max_E)/(0.057*Radius_Earth));
 
-            espec = espec_stab_E[(spot-1)] * R_max_E*Poly_cut/rad;
+            //espec += espec_stab_E[(spot-1)] * R_max_E*Poly_cut/rad;
+	    espec += 1.0e11*exp(-1*(rad-R_max_E)/(1.907*Radius_Earth));
 
 	    momx = den*delvx_1;
             momy = den*yvel;
@@ -384,7 +397,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 	}
 
         //Impactor use rad2, _I, delvx_2
-        if (rad2 < R_max_I*atm_ext) {
+        if (rad2 < Radius_Earth*atm_ext_i) {
           if (rad2 < R_max_I*Poly_cut) {
             while (r_spot <rad2){
               r_spot = r_spot + dr_I;
@@ -410,16 +423,27 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
             momy = den*yvel;
             kin = 0.5*den*delvx_2*delvx_2+0.5*den*yvel*yvel;
           } else {
-            while (r_spot < R_max_I*Poly_cut){
-              r_spot = r_spot + dr_I;
-              spot = spot + 1;
-            }
+            //while (r_spot < R_max_I*Poly_cut){
+            //  r_spot = r_spot + dr_I;
+            //  spot = spot + 1;
+            //}
             //std::cout << r_spot << std::endl;
-            den = den_stab_I[(spot-1)] * std::pow(R_max_I*Poly_cut/rad2,15.0);
+            //den = den_stab_I[(spot-1)] * std::pow(R_max_I*Poly_cut/rad2,15.0);
+            
+            Real imp_amb = 0.1;
+            den += imp_amb*exp(-1*(rad2-R_max_I)/(0.0509*Radius_Earth));
 
-            espec = espec_stab_I[(spot-1)] * R_max_I*Poly_cut/rad2;
+           
+            espec += 7.5e10*exp(-1*(rad2-R_max_I)/(1.568*Radius_Earth))
+		    + 4.0e9*exp((rad2-1.2*Radius_Earth)/(0.0932*Radius_Earth));
 
-            momx = den*delvx_2;
+            //espec = espec_stab_I[(spot-1)] * R_max_I*Poly_cut/rad2;
+            
+	    if (rad < R_max_E*Poly_cut){
+              momx = den*delvx_1;
+	    } else {
+              momx = den*delvx_2;
+	    }
             momy = den*yvel;
             kin = 0.5*den*delvx_2*delvx_2+0.5*den*yvel*yvel;
           }
@@ -689,14 +713,14 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
             Real rad_1 = std::sqrt(SQR(x-(x0+delx_1)) + SQR(y-(y0+dely_1)) + SQR(z-z0));
             Real rad_2 = std::sqrt(SQR(x-(x0+delx_2)) + SQR(y-(y0+dely_2)) + SQR(z-z0));
             if (n < 1) {
-              if (rad_1 <= R_max_E*atm_ext) {
+              if (rad_1 <= R_max_E) {
                 pscalars->s(n,k,j,i) = 1.0/scalar_norm*phydro->u(IDN,k,j,i);
                 //pscalars->s(n,k,j,i) = 1.0/scalar_norm;
               } else {
                 pscalars->s(n,k,j,i) = 0.0;
               }
             } else {
-              if (rad_2 <= R_max_I*atm_ext) {
+              if (rad_2 <= R_max_I) {
                 pscalars->s(n,k,j,i) = 1.0/scalar_norm*phydro->u(IDN,k,j,i);
                 //pscalars->s(n,k,j,i) = 1.0/scalar_norm;
               } else {
@@ -710,6 +734,128 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   }
  //std::cout << "here" << std::endl;
  //gets here
+}
+
+void Mesh::UserWorkInLoop(){
+  sanity = 0.0;
+  Real test_var = 0.0;
+  //std::cout << time << std::endl;
+  apply_rubberband=false;
+  if (time >= rubberband_next_time) {
+    rubberband_next_time += rubberband_dt;
+    Real total_mass = 0.0;
+    Real center_of_mass_x1 = 0.0;
+    Real center_of_mass_x2 = 0.0;
+    Real center_of_mass_vx1 = 0.0;
+    Real center_of_mass_vx2 = 0.0;
+    AthenaArray<Real> vol;
+    for (int bn=0; bn<nblocal; ++bn) {
+      MeshBlock *pmb = my_blocks(bn);
+      //sanity += 1.0;
+      test_var += 1.0;
+      Real x_min = 0.0;
+      Real x_max = 0.0;
+      vol.NewAthenaArray((pmb->ie-pmb->is)+2*NGHOST+1);
+      for (int k=pmb->ks; k<=pmb->ke; k++) {
+        for (int j=pmb->js; j<=pmb->je; j++) {
+	  pmb->pcoord->CellVolume(k,j,pmb->is,pmb->ie,vol);
+          for (int i=pmb->is; i<=pmb->ie; i++) {
+	    center_of_mass_x1  += vol(i)*pmb->phydro->u(IDN,k,j,i)*pmb->pcoord->x1v(i);
+            center_of_mass_x2  += vol(i)*pmb->phydro->u(IDN,k,j,i)*pmb->pcoord->x2v(j);
+            center_of_mass_vx1 += vol(i)*pmb->phydro->u(IM1,k,j,i);
+            center_of_mass_vx2 += vol(i)*pmb->phydro->u(IM2,k,j,i);
+            total_mass         += vol(i)*pmb->phydro->u(IDN,k,j,i);
+	    //Real x1 = pmb->pcoord->x1v(i);
+	    //x_min = std::min(x_min, x1);
+	    //x_max = std::max(x_max, x1);
+	  }
+	}
+      }
+      //std::cout << x_min << std::endl;
+      //std::cout << x_max << std::endl;
+    }
+  #ifdef MPI_PARALLEL
+    //MPI_Allreduce(MPI_IN_PLACE, &test_var, 1, MPI_ATHENA_REAL, MPI_SUM,
+    //                MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &center_of_mass_x1, 1, MPI_ATHENA_REAL, MPI_SUM,
+                    MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &center_of_mass_x2, 1, MPI_ATHENA_REAL, MPI_SUM,
+                    MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &center_of_mass_vx1, 1, MPI_ATHENA_REAL, MPI_SUM,
+                    MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &center_of_mass_vx2, 1, MPI_ATHENA_REAL, MPI_SUM,
+                    MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &total_mass, 1, MPI_ATHENA_REAL, MPI_SUM,
+                    MPI_COMM_WORLD);
+  #endif
+
+    //std::cout <<test_var <<std::endl;
+    //sanity +=test_var;
+
+    center_of_mass_x1 /= total_mass;
+    center_of_mass_x2 /= total_mass;
+    center_of_mass_vx1 /= total_mass;
+    center_of_mass_vx2 /= total_mass;
+    // define unit vector pointing from center of mass to origin
+    Real rubberband_vector_x1 =  (0.0-center_of_mass_x1);
+    Real rubberband_vector_x2 =  (0.0-center_of_mass_x2);
+    Real rubberband_vector_norm = std::sqrt(SQR(rubberband_vector_x1) +
+                                              SQR(rubberband_vector_x2));
+    if (rubberband_vector_norm > 0.05*mesh_size.x1max) {
+      apply_rubberband=true;
+      Real rubberband_unit_vector_x1 = rubberband_vector_x1/rubberband_vector_norm;
+      Real rubberband_unit_vector_x2 = rubberband_vector_x2/rubberband_vector_norm;
+      // rubberband velocity
+      Real rubberband_velocity = (rubberband_max
+                                    * (rubberband_vector_norm
+                                       / std::sqrt(SQR(mesh_size.x1max) +
+                                                   SQR(mesh_size.x2max))));
+      rubberband_dvx1 = (rubberband_velocity*rubberband_unit_vector_x1
+                          - center_of_mass_vx1);
+      rubberband_dvx2 = (rubberband_velocity*rubberband_unit_vector_x2
+                          - center_of_mass_vx2);
+      rubberband_dvx3 = 0.0;
+    } else {
+      //std::cout << "here" <<std::endl;
+      apply_rubberband = false;
+    }
+    //return;
+  }
+}
+
+void Rubber(MeshBlock *pmb, const Real time, const Real dt,
+              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
+              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
+              AthenaArray<Real> &cons_scalar){
+  //std::cout<< pmb->pmy_mesh->sanity <<std::endl; 
+  //std::cout<< pmb->pmy_mesh->rubberband_dvx1 << std::endl;
+  if(pmb->pmy_mesh->apply_rubberband){
+    std::cout<< "rubberbandding active" <<std::endl;
+    for (int k=pmb->ks; k<=pmb->ke; ++k) {
+      for (int j=pmb->js; j<=pmb->je; ++j) {
+        for (int i=pmb->is; i<=pmb->ie; ++i) {
+          pmb->phydro->u(IM1,k,j,i) += (pmb->phydro->w(IDN,k,j,i)
+                                        * pmb->pmy_mesh->rubberband_dvx1);
+          pmb->phydro->u(IM2,k,j,i) += (pmb->phydro->w(IDN,k,j,i)
+                                        * pmb->pmy_mesh->rubberband_dvx2);
+          pmb->phydro->u(IM3,k,j,i) += (pmb->phydro->w(IDN,k,j,i)
+                                        * pmb->pmy_mesh->rubberband_dvx3);
+          pmb->phydro->u(IEN,k,j,i) += (0.5*pmb->phydro->w(IDN,k,j,i)
+                                        * (2. * pmb->phydro->w(IVX,k,j,i)
+                                           * pmb->pmy_mesh->rubberband_dvx1
+                                           + SQR(pmb->pmy_mesh->rubberband_dvx1)
+                                           + 2. * pmb->phydro->w(IVY,k,j,i)
+                                           * pmb->pmy_mesh->rubberband_dvx2
+                                           + SQR(pmb->pmy_mesh->rubberband_dvx2)
+                                           + 2. * pmb->phydro->w(IVZ,k,j,i)
+                                           * pmb->pmy_mesh->rubberband_dvx3
+                                           + SQR(pmb->pmy_mesh->rubberband_dvx3)));
+        }
+      }
+    }
+  }
+  //std::cout<< "here" << std::endl;
+  return;
 }
 
 Real Mag_En_R(MeshBlock *pmb, int iout)
