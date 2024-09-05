@@ -107,6 +107,18 @@ Mesh::Mesh(ParameterInput *pin, int mesh_test) :
     use_uniform_meshgen_fn_{true, true, true},
     nreal_user_mesh_data_(), nint_user_mesh_data_(), nuser_history_output_(),
     four_pi_G_(-1.0),
+    apply_rubberband(false),
+    rubberband_dt(pin->GetOrAddReal("problem","rubberband_dt",0.0)),
+    rubberband_max(pin->GetOrAddReal("problem","rubberband_max_velocity",0.0)),
+    rubberband_next_time(pin->GetOrAddReal("problem","rubberband_init_time",0.0)),
+    rubberband_dvx1(0.0),
+    rubberband_dvx2(0.0),
+    rubberband_dvx3(0.0),
+    Mass_sum(0.0), sanity(0.0),
+    Mass_mult_x1(0.0),
+    Mass_mult_x2(0.0),
+    Mass_mult_mom1(0.0),
+    Mass_mult_mom2(0.0),
     lb_flag_(true), lb_automatic_(), lb_manual_(),
     MeshGenerator_{UniformMeshGeneratorX1, UniformMeshGeneratorX2,
                    UniformMeshGeneratorX3},
@@ -119,6 +131,20 @@ Mesh::Mesh(ParameterInput *pin, int mesh_test) :
   std::stringstream msg;
   BoundaryFlag block_bcs[6];
   std::int64_t nbmax;
+
+  //apply_rubberband = false;
+  //rubberband_next_time = pin->GetOrAddReal("problem","rubberband_init_time",0.0);
+  //rubberband_dt = pin->GetOrAddReal("problem","rubberband_dt",0.0);
+  //rubberband_max = pin->GetOrAddReal("problem","rubberband_max_velocity",0.0);
+  //rubberband_dvx1 = 0.0;
+  //rubberband_dvx2 = 0.0;
+  //rubberband_dvx3 = 0.0;
+  //sanity = 0.0;
+  //Mass_sum = 0.0;
+  //Mass_mult_x1 = 0.0;
+  //Mass_mult_x2 = 0.0;
+  //Mass_mult_mom1 = 0.0;
+  //Mass_mult_mom2 = 0.0;
 
   // mesh test
   if (mesh_test > 0) Globals::nranks = mesh_test;
@@ -595,6 +621,17 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
     use_uniform_meshgen_fn_{true, true, true},
     nreal_user_mesh_data_(), nint_user_mesh_data_(), nuser_history_output_(),
     four_pi_G_(-1.0),
+    apply_rubberband(false),
+    rubberband_dt(pin->GetOrAddReal("problem","rubberband_dt",0.0)),
+    rubberband_max(pin->GetOrAddReal("problem","rubberband_max_velocity",0.0)),
+    rubberband_dvx1(0.0),
+    rubberband_dvx2(0.0),
+    rubberband_dvx3(0.0),
+    Mass_sum(0.0), sanity(0.0),
+    Mass_mult_x1(0.0),
+    Mass_mult_x2(0.0),
+    Mass_mult_mom1(0.0),
+    Mass_mult_mom2(0.0),
     lb_flag_(true), lb_automatic_(), lb_manual_(),
     MeshGenerator_{UniformMeshGeneratorX1, UniformMeshGeneratorX2,
                    UniformMeshGeneratorX3},
@@ -604,6 +641,20 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
     OrbitalVelocity_{}, OrbitalVelocityDerivative_{nullptr, nullptr},
     MGGravityBoundaryFunction_{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     MGGravitySourceMaskFunction_{} {
+
+  //apply_rubberband = false;
+  //rubberband_dt = pin->GetOrAddReal("problem","rubberband_dt",0.0);
+  //rubberband_max = pin->GetOrAddReal("problem","rubberband_max_velocity",0.0);
+  //rubberband_dvx1 = 0.0;
+  //rubberband_dvx2 = 0.0;
+  //rubberband_dvx3 = 0.0;
+  //sanity = 0.0;
+  //Mass_sum = 0.0;
+  //Mass_mult_x1 = 0.0;
+  //Mass_mult_x2 = 0.0;
+  //Mass_mult_mom1 = 0.0;
+  //Mass_mult_mom2 = 0.0;
+
   std::stringstream msg;
   BoundaryFlag block_bcs[6];
   IOWrapperSizeT *offset{};
@@ -656,6 +707,8 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
   hdos += sizeof(Real);
   std::memcpy(&dt, &(headerdata[hdos]), sizeof(Real));
   hdos += sizeof(Real);
+  std::memcpy(&rubberband_next_time, &(headerdata[hdos]), sizeof(Real));
+  hdos+=sizeof(Real);
   std::memcpy(&ncycle, &(headerdata[hdos]), sizeof(int));
   hdos += sizeof(int);
   std::memcpy(&datasize, &(headerdata[hdos]), sizeof(IOWrapperSizeT));

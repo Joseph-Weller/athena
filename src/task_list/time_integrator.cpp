@@ -1606,6 +1606,9 @@ TaskStatus TimeIntegratorTaskList::IntegrateHydro(MeshBlock *pmb, int stage) {
         pmb->pcoord->AddCoordTermsDivergence(wght_ssp, ph->flux, ph->w, pf->bcc, ph->u2);
       }
     }
+    //pmb->pmy_mesh->sanity += 1.0;
+    //std::cout << pmb->pmy_mesh->sanity << std::endl;
+
     return TaskStatus::next;
   }
   return TaskStatus::fail;

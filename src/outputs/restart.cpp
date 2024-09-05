@@ -104,6 +104,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool force_wr
     resfile.Write(&(pm->mesh_size), sizeof(RegionSize), 1);
     resfile.Write(&(pm->time), sizeof(Real), 1);
     resfile.Write(&(pm->dt), sizeof(Real), 1);
+    resfile.Write(&(pm->rubberband_next_time), sizeof(Real), 1);
     resfile.Write(&(pm->ncycle), sizeof(int), 1);
     resfile.Write(&(datasize), sizeof(IOWrapperSizeT), 1);
 

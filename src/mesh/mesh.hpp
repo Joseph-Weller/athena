@@ -230,6 +230,21 @@ class Mesh {
   TaskType sts_loc;
   Real muj, nuj, muj_tilde, gammaj_tilde;
   int nbtotal, nblocal, nbnew, nbdel;
+  
+  bool apply_rubberband;
+  Real rubberband_next_time;
+  Real rubberband_dt;
+  Real rubberband_max;
+  Real rubberband_dvx1;
+  Real rubberband_dvx2;
+  Real rubberband_dvx3;
+  Real sanity;
+  Real Mass_sum;
+  Real Mass_mult_x1;
+  Real Mass_mult_x2;
+  Real Mass_mult_mom1;
+  Real Mass_mult_mom2;
+  
 
   int step_since_lb;
   int turb_flag; // turbulence flag
