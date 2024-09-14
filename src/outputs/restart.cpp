@@ -79,7 +79,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool force_wr
     udsize += pm->ruser_mesh_data[n].GetSizeInBytes();
 
   headeroffset = sbuf.size()*sizeof(char) + 3*sizeof(int)+sizeof(RegionSize)
-                 + 2*sizeof(Real)+sizeof(IOWrapperSizeT)+udsize;
+                 + 3*sizeof(Real)+sizeof(IOWrapperSizeT)+udsize;
   // the size of an element of the ID and cost list
   listsize = sizeof(LogicalLocation)+sizeof(double);
   // the size of each MeshBlock

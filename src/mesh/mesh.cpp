@@ -654,7 +654,7 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
   //Mass_mult_x2 = 0.0;
   //Mass_mult_mom1 = 0.0;
   //Mass_mult_mom2 = 0.0;
-
+      
   std::stringstream msg;
   BoundaryFlag block_bcs[6];
   IOWrapperSizeT *offset{};
@@ -681,7 +681,7 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
   headeroffset = resfile.GetPosition();
   // read the restart file
   // the file is already open and the pointer is set to after <par_end>
-  IOWrapperSizeT headersize = sizeof(int)*3+sizeof(Real)*2
+  IOWrapperSizeT headersize = sizeof(int)*3+sizeof(Real)*3
                               + sizeof(RegionSize)+sizeof(IOWrapperSizeT);
   char *headerdata = new char[headersize];
   if (Globals::my_rank == 0) { // the master process reads the header data
@@ -713,7 +713,7 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
   hdos += sizeof(int);
   std::memcpy(&datasize, &(headerdata[hdos]), sizeof(IOWrapperSizeT));
   hdos += sizeof(IOWrapperSizeT);   // (this updated value is never used)
-
+  
   delete [] headerdata;
 
   // initialize
@@ -769,6 +769,7 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
   } else {
     max_level = 63;
   }
+  
 
   if (EOS_TABLE_ENABLED) peos_table = new EosTable(pin);
   InitUserMeshData(pin);
@@ -822,7 +823,6 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
   // then broadcast the ID list
   MPI_Bcast(idlist, listsize*nbtotal, MPI_BYTE, 0, MPI_COMM_WORLD);
 #endif
-
   int os = 0;
   for (int i=0; i<nbtotal; i++) {
     std::memcpy(&(loclist[i]), &(idlist[os]), sizeof(LogicalLocation));
@@ -883,6 +883,7 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
   }
 
   CalculateLoadBalance(costlist, ranklist, nslist, nblist, nbtotal);
+  
 
   // Output MeshBlock list and quit (mesh test only); do not create meshes
   if (mesh_test > 0) {
@@ -897,7 +898,7 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
     // MGDriver must be initialzied before MeshBlocks
     pmgrd = new MGGravityDriver(this, pin);
   }
-
+  
   // allocate data buffer
   int nbmin = nblist[0];
   for (int n = 1; n < Globals::nranks; ++n) {
@@ -909,6 +910,7 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
   gide_ = gids_ + nblocal - 1;
   char *mbdata = new char[datasize];
   my_blocks.NewAthenaArray(nblocal);
+
   for (int i=gids_; i<=gide_; i++) {
     if (i - gids_ < nbmin) {
       // load MeshBlock (parallel)
@@ -943,6 +945,7 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
   }
 
   ResetLoadBalanceVariables();
+  
 
   // clean up
   delete [] offset;
