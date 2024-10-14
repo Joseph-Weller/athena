@@ -863,7 +863,7 @@ Real Mag_En_R(MeshBlock *pmb, int iout)
   //std::cout << "here" << std::endl;
   int is=pmb->is, ie=pmb->ie, js=pmb->js, je=pmb->je, ks=pmb->ks, ke=pmb->ke;
   FaceField &b = pmb->pfield->b;
-  Real EBr = 0;
+  Real EBr = 0.0;
   //Real EBphi = 0;
   //Real EBz = 0;
   Real r_rho_x = 0.0;
@@ -888,9 +888,9 @@ Real Mag_En_R(MeshBlock *pmb, int iout)
     }
   }
 
-  Real r_max = 4*R_earth;
-  Real r_min = 3*R_earth;
-  Real z_mag = R_earth;
+  Real r_max = 4.0*R_earth;
+  Real r_min = 3.0*R_earth;
+  Real z_mag = 0.5*R_earth;
   
 
   for (int k=ks; k<=ke; ++k) {
@@ -941,7 +941,7 @@ Real Mag_En_phi(MeshBlock *pmb, int iout)
   int is=pmb->is, ie=pmb->ie, js=pmb->js, je=pmb->je, ks=pmb->ks, ke=pmb->ke;
   FaceField &b = pmb->pfield->b;
   //Real EBr = 0;
-  Real EBphi = 0;
+  Real EBphi = 0.0;
   //Real EBz = 0;
   Real r_rho_x = 0.0;
   Real r_rho_y = 0.0;
@@ -963,9 +963,9 @@ Real Mag_En_phi(MeshBlock *pmb, int iout)
     }
   }
 
-  Real r_max = 4*R_earth;
-  Real r_min = 3*R_earth;
-  Real z_mag = R_earth;
+  Real r_max = 4.0*R_earth;
+  Real r_min = 3.0*R_earth;
+  Real z_mag = 0.5*R_earth;
 
   AthenaArray<Real> vol;
   vol.NewAthenaArray((ie-is)+2*NGHOST+1);
@@ -1018,7 +1018,7 @@ Real Mag_En_z(MeshBlock *pmb, int iout)
   FaceField &b = pmb->pfield->b;
   //Real EBr = 0;
   //Real EBphi = 0;
-  Real EBz = 0;
+  Real EBz = 0.0;
   Real r_rho_x = 0.0;
   Real r_rho_y = 0.0;
   Real r_rho_z = 0.0;
@@ -1039,9 +1039,9 @@ Real Mag_En_z(MeshBlock *pmb, int iout)
     }
   }
 
-  Real r_max = 4*R_earth;
-  Real r_min = 3*R_earth;
-  Real z_mag = R_earth;
+  Real r_max = 4.0*R_earth;
+  Real r_min = 3.0*R_earth;
+  Real z_mag = 0.5*R_earth;
 
   AthenaArray<Real> vol;
   vol.NewAthenaArray((ie-is)+2*NGHOST+1);
