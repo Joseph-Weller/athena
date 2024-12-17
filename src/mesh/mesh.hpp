@@ -232,6 +232,8 @@ class Mesh {
   int nbtotal, nblocal, nbnew, nbdel;
   
   bool apply_rubberband;
+  Real center_mass_x;
+  Real center_mass_y;
   Real rubberband_next_time;
   Real rubberband_dt;
   Real rubberband_max;

@@ -272,7 +272,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   Real dely_2 = (mass_1/mtot)*y_disp;
 
   // velocities for each colliding body
-  Real esc_vel = std::sqrt(2*gconst*(mass_1+mass_2)/r_disp);
+  //Real esc_vel = std::sqrt(2*gconst*(mass_1+mass_2)/r_disp);
+  Real esc_vel = std::sqrt(2*gconst*(mass_1+mass_2)/(R_max_E+R_max_I));
   Real vcoll = pin->GetOrAddReal("problem", "vcoll", 0.0)*esc_vel;
   Real delvx_1 = -1.0*(mass_2/mtot)*vcoll;
   Real delvx_2 = (mass_1/mtot)*vcoll;
@@ -741,61 +742,66 @@ void Mesh::UserWorkInLoop(){
   Real test_var = 0.0;
   //std::cout << time << std::endl;
   apply_rubberband=false;
-  if (time >= rubberband_next_time) {
-    rubberband_next_time += rubberband_dt;
-    Real total_mass = 0.0;
-    Real center_of_mass_x1 = 0.0;
-    Real center_of_mass_x2 = 0.0;
-    Real center_of_mass_vx1 = 0.0;
-    Real center_of_mass_vx2 = 0.0;
-    AthenaArray<Real> vol;
-    for (int bn=0; bn<nblocal; ++bn) {
-      MeshBlock *pmb = my_blocks(bn);
-      //sanity += 1.0;
-      test_var += 1.0;
-      Real x_min = 0.0;
-      Real x_max = 0.0;
-      vol.NewAthenaArray((pmb->ie-pmb->is)+2*NGHOST+1);
-      for (int k=pmb->ks; k<=pmb->ke; k++) {
-        for (int j=pmb->js; j<=pmb->je; j++) {
-	  pmb->pcoord->CellVolume(k,j,pmb->is,pmb->ie,vol);
-          for (int i=pmb->is; i<=pmb->ie; i++) {
-	    center_of_mass_x1  += vol(i)*pmb->phydro->u(IDN,k,j,i)*pmb->pcoord->x1v(i);
-            center_of_mass_x2  += vol(i)*pmb->phydro->u(IDN,k,j,i)*pmb->pcoord->x2v(j);
-            center_of_mass_vx1 += vol(i)*pmb->phydro->u(IM1,k,j,i);
-            center_of_mass_vx2 += vol(i)*pmb->phydro->u(IM2,k,j,i);
-            total_mass         += vol(i)*pmb->phydro->u(IDN,k,j,i);
-	    //Real x1 = pmb->pcoord->x1v(i);
-	    //x_min = std::min(x_min, x1);
-	    //x_max = std::max(x_max, x1);
-	  }
+  
+  Real total_mass = 0.0;
+  Real center_of_mass_x1 = 0.0;
+  Real center_of_mass_x2 = 0.0;
+  Real center_of_mass_vx1 = 0.0;
+  Real center_of_mass_vx2 = 0.0;
+  AthenaArray<Real> vol;
+  for (int bn=0; bn<nblocal; ++bn) {
+    MeshBlock *pmb = my_blocks(bn);
+    //sanity += 1.0;
+    test_var += 1.0;
+    Real x_min = 0.0;
+    Real x_max = 0.0;
+    vol.NewAthenaArray((pmb->ie-pmb->is)+2*NGHOST+1);
+    for (int k=pmb->ks; k<=pmb->ke; k++) {
+      for (int j=pmb->js; j<=pmb->je; j++) {
+	pmb->pcoord->CellVolume(k,j,pmb->is,pmb->ie,vol);
+        for (int i=pmb->is; i<=pmb->ie; i++) {
+	  center_of_mass_x1  += vol(i)*pmb->phydro->u(IDN,k,j,i)*pmb->pcoord->x1v(i);
+          center_of_mass_x2  += vol(i)*pmb->phydro->u(IDN,k,j,i)*pmb->pcoord->x2v(j);
+          center_of_mass_vx1 += vol(i)*pmb->phydro->u(IM1,k,j,i);
+          center_of_mass_vx2 += vol(i)*pmb->phydro->u(IM2,k,j,i);
+          total_mass         += vol(i)*pmb->phydro->u(IDN,k,j,i);
+	  //Real x1 = pmb->pcoord->x1v(i);
+	  //x_min = std::min(x_min, x1);
+	  //x_max = std::max(x_max, x1);
 	}
       }
+    }
       //std::cout << x_min << std::endl;
       //std::cout << x_max << std::endl;
-    }
+  }
   #ifdef MPI_PARALLEL
     //MPI_Allreduce(MPI_IN_PLACE, &test_var, 1, MPI_ATHENA_REAL, MPI_SUM,
     //                MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &center_of_mass_x1, 1, MPI_ATHENA_REAL, MPI_SUM,
+  MPI_Allreduce(MPI_IN_PLACE, &center_of_mass_x1, 1, MPI_ATHENA_REAL, MPI_SUM,
                     MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &center_of_mass_x2, 1, MPI_ATHENA_REAL, MPI_SUM,
+  MPI_Allreduce(MPI_IN_PLACE, &center_of_mass_x2, 1, MPI_ATHENA_REAL, MPI_SUM,
                     MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &center_of_mass_vx1, 1, MPI_ATHENA_REAL, MPI_SUM,
+  MPI_Allreduce(MPI_IN_PLACE, &center_of_mass_vx1, 1, MPI_ATHENA_REAL, MPI_SUM,
                     MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &center_of_mass_vx2, 1, MPI_ATHENA_REAL, MPI_SUM,
+  MPI_Allreduce(MPI_IN_PLACE, &center_of_mass_vx2, 1, MPI_ATHENA_REAL, MPI_SUM,
                     MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &total_mass, 1, MPI_ATHENA_REAL, MPI_SUM,
+  MPI_Allreduce(MPI_IN_PLACE, &total_mass, 1, MPI_ATHENA_REAL, MPI_SUM,
                     MPI_COMM_WORLD);
   #endif
 
-    //std::cout <<test_var <<std::endl;
-    //sanity +=test_var;
+  //std::cout <<test_var <<std::endl;
+  //sanity +=test_var;
 
-    center_of_mass_x1 /= total_mass;
-    center_of_mass_x2 /= total_mass;
-    center_of_mass_vx1 /= total_mass;
-    center_of_mass_vx2 /= total_mass;
+  center_of_mass_x1 /= total_mass;
+  center_of_mass_x2 /= total_mass;
+  center_of_mass_vx1 /= total_mass;
+  center_of_mass_vx2 /= total_mass;
+  
+  center_mass_x = center_of_mass_x1;
+  center_mass_y = center_of_mass_x2;
+
+  if (time >= rubberband_next_time) {
+    rubberband_next_time += rubberband_dt;
     // define unit vector pointing from center of mass to origin
     Real rubberband_vector_x1 =  (0.0-center_of_mass_x1);
     Real rubberband_vector_x2 =  (0.0-center_of_mass_x2);
@@ -866,27 +872,14 @@ Real Mag_En_R(MeshBlock *pmb, int iout)
   Real EBr = 0.0;
   //Real EBphi = 0;
   //Real EBz = 0;
-  Real r_rho_x = 0.0;
-  Real r_rho_y = 0.0;
+  Real r_rho_x = pmb->pmy_mesh->center_mass_x;
+  Real r_rho_y = pmb->pmy_mesh->center_mass_y;
   Real r_rho_z = 0.0;
   Real rho_max = 1e-30;
   Real rho_test = 1e-30;
   Real R_earth = 6.378e8; //cgs
   AthenaArray<Real> vol;
   vol.NewAthenaArray((ie-is)+2*NGHOST+1);
-  for (int k=ks; k<=ke; ++k) {
-    for (int j=js; j<=je; ++j) {
-      for (int i=is; i<=ie; ++i) {
-        rho_test = pmb->phydro->u(IDN,k,j,i);
-        if (rho_max <= rho_test) {
-          r_rho_x = pmb->pcoord->x1v(i);
-          r_rho_y = pmb->pcoord->x2v(j);
-          r_rho_z = pmb->pcoord->x3v(k);
-        }
-        rho_max = std::max(rho_test,rho_max);
-      }
-    }
-  }
 
   Real r_max = 4.0*R_earth;
   Real r_min = 3.0*R_earth;
@@ -943,25 +936,12 @@ Real Mag_En_phi(MeshBlock *pmb, int iout)
   //Real EBr = 0;
   Real EBphi = 0.0;
   //Real EBz = 0;
-  Real r_rho_x = 0.0;
-  Real r_rho_y = 0.0;
+  Real r_rho_x = pmb->pmy_mesh->center_mass_x;
+  Real r_rho_y = pmb->pmy_mesh->center_mass_y;
   Real r_rho_z = 0.0;
   Real rho_max = 1e-30;
   Real rho_test = 1e-30;
   Real R_earth = 6.378e8; //cgs
-  for (int k=ks; k<=ke; ++k) {
-    for (int j=js; j<=je; ++j) {
-      for (int i=is; i<=ie; ++i) {
-        rho_test = pmb->phydro->u(IDN,k,j,i);
-        if (rho_max <= rho_test) {
-          r_rho_x = pmb->pcoord->x1v(i);
-          r_rho_y = pmb->pcoord->x2v(j);
-          r_rho_z = pmb->pcoord->x3v(k);
-        }
-        rho_max = std::max(rho_test,rho_max);
-      }
-    }
-  }
 
   Real r_max = 4.0*R_earth;
   Real r_min = 3.0*R_earth;
@@ -1019,25 +999,12 @@ Real Mag_En_z(MeshBlock *pmb, int iout)
   //Real EBr = 0;
   //Real EBphi = 0;
   Real EBz = 0.0;
-  Real r_rho_x = 0.0;
-  Real r_rho_y = 0.0;
+  Real r_rho_x = pmb->pmy_mesh->center_mass_x;
+  Real r_rho_y = pmb->pmy_mesh->center_mass_y;
   Real r_rho_z = 0.0;
   Real rho_max = 1e-30;
   Real rho_test = 1e-30;
   Real R_earth = 6.378e8; //cgs
-  for (int k=ks; k<=ke; ++k) {
-    for (int j=js; j<=je; ++j) {
-      for (int i=is; i<=ie; ++i) {
-        rho_test = pmb->phydro->u(IDN,k,j,i);
-        if (rho_max <= rho_test) {
-          r_rho_x = pmb->pcoord->x1v(i);
-          r_rho_y = pmb->pcoord->x2v(j);
-          r_rho_z = pmb->pcoord->x3v(k);
-        }
-        rho_max = std::max(rho_test,rho_max);
-      }
-    }
-  }
 
   Real r_max = 4.0*R_earth;
   Real r_min = 3.0*R_earth;
