@@ -33,6 +33,8 @@ EquationOfState::EquationOfState(MeshBlock *pmb, ParameterInput *pin) :
   ptable{pmb->pmy_mesh->peos_table},
   pmy_block_{pmb},
   gamma_{pin->GetOrAddReal("hydro", "gamma", 2.)},
+  max_velocity_{pin->GetOrAddReal("hydro", "max_velocity", std::numeric_limits<Real>::max())},
+  specific_intenergy_ceiling_{pin->GetOrAddReal("hydro", "eceiling", std::numeric_limits<Real>::max())},
   density_floor_{pin->GetOrAddReal("hydro", "dfloor", std::sqrt(1024*float_min))},
   espec_floor_{pin->GetOrAddReal("hydro", "efloor", std::sqrt(1024*float_min))},
   scalar_floor_{pin->GetOrAddReal("hydro", "sfloor", std::sqrt(1024*float_min))} {
@@ -88,6 +90,57 @@ void EquationOfState::ConservedToPrimitive(
         // apply specific internal energy floor, correct total energy
         u_e = (w_e > espec_floor_) ? u_e : (w_d*espec_floor_ + ke);
         w_e = (w_e > espec_floor_) ? w_e : espec_floor_;
+
+	//apply velocity ceiling
+        Real m_sq = SQR(u_m1) + SQR(u_m2) + SQR(u_m3);
+        Real v_sq = SQR(w_vx) + SQR(w_vy) + SQR(w_vz);
+        Real m_abs = std::sqrt(m_sq);
+        Real v_abs = (std::sqrt(v_sq) > 0.0) ? std::sqrt(v_sq) : 0.0;
+
+        if (v_abs > max_velocity_) {
+          Real v_over_m = max_velocity_ / m_abs;
+
+          // apply velocity ceiling
+          Real tmp_vx = u_m1 * v_over_m;
+          Real tmp_vy = u_m2 * v_over_m;
+          Real tmp_vz = u_m3 * v_over_m;
+
+          // correct momentum
+          u_m1 = w_d * tmp_vx;
+          u_m2 = w_d * tmp_vy;
+          u_m3 = w_d * tmp_vz;
+
+          // correct velocities
+          w_vx = u_m1*di;
+          w_vy = u_m2*di;
+          w_vz = u_m3*di;
+
+          // correct kinetic energy
+          Real delta_ke = 0.5*di*(SQR(u_m1) + SQR(u_m2) + SQR(u_m3)) - ke;
+          ke = 0.5*di*(SQR(u_m1) + SQR(u_m2) + SQR(u_m3));
+
+          // correct total energy
+          u_e += delta_ke;
+
+          // recalculate specific internal energy
+          w_e = di*(u_e - ke);
+
+          // reapply specific internal energy floor
+          u_e = (w_e > espec_floor_) ? u_e : (w_d*espec_floor_ + ke);
+          //u_e = (w_e > espec_floor_) ? w_e : espec_floor_;
+          //attempated fix below
+          w_e = (w_e > espec_floor_) ? w_e : espec_floor_;
+        }
+
+	// apply specific internal energy ceiling
+        if (w_e > specific_intenergy_ceiling_) {
+          // correct total energy
+          u_e = w_d*specific_intenergy_ceiling_ + ke + pb;
+
+          // recalculate specific internal energy
+          w_e = di * (u_e - ke);
+        }
+
       }
     }
   }

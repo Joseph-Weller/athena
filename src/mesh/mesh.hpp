@@ -234,6 +234,7 @@ class Mesh {
   bool apply_rubberband;
   Real center_mass_x;
   Real center_mass_y;
+  Real center_mass_z;
   Real rubberband_next_time;
   Real rubberband_dt;
   Real rubberband_max;
@@ -246,6 +247,10 @@ class Mesh {
   Real Mass_mult_x2;
   Real Mass_mult_mom1;
   Real Mass_mult_mom2;
+
+  bool apply_magnetic_mult;
+  Real Magnetic_mult_time;
+  Real Magnetic_mult_factor;
   
 
   int step_since_lb;

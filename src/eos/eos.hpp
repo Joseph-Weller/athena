@@ -166,6 +166,7 @@ class EquationOfState {
   Real iso_sound_speed_, gamma_;         // isothermal Cs, ratio of specific heats
   Real density_floor_, pressure_floor_;  // density and pressure floors
   Real espec_floor_, energy_floor_;      // specific internal energy and energy floor
+  Real max_velocity_, specific_intenergy_ceiling_; //ceilings
   Real scalar_floor_; // dimensionless concentration floor
   Real sigma_max_, beta_min_;            // limits on ratios of gas quantities to pmag
   Real gamma_max_;                       // maximum Lorentz factor

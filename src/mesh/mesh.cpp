@@ -107,12 +107,16 @@ Mesh::Mesh(ParameterInput *pin, int mesh_test) :
     use_uniform_meshgen_fn_{true, true, true},
     nreal_user_mesh_data_(), nint_user_mesh_data_(), nuser_history_output_(),
     four_pi_G_(-1.0),
+    apply_magnetic_mult(false),
+    Magnetic_mult_time(pin->GetOrAddReal("problem","Magnetic_mult_time", 1e300)),
+    Magnetic_mult_factor(pin->GetOrAddReal("problem","Magnetic_mult_factor",1.0)),
     apply_rubberband(false),
     rubberband_dt(pin->GetOrAddReal("problem","rubberband_dt",0.0)),
     rubberband_max(pin->GetOrAddReal("problem","rubberband_max_velocity",0.0)),
     rubberband_next_time(pin->GetOrAddReal("problem","rubberband_init_time",0.0)),
     center_mass_x(0.0),
     center_mass_y(0.0),
+    center_mass_z(0.0),
     rubberband_dvx1(0.0),
     rubberband_dvx2(0.0),
     rubberband_dvx3(0.0),
@@ -623,11 +627,14 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
     use_uniform_meshgen_fn_{true, true, true},
     nreal_user_mesh_data_(), nint_user_mesh_data_(), nuser_history_output_(),
     four_pi_G_(-1.0),
+    apply_magnetic_mult(false),
+    Magnetic_mult_factor(pin->GetOrAddReal("problem","Magnetic_mult_factor",1.0)),
     apply_rubberband(false),
     rubberband_dt(pin->GetOrAddReal("problem","rubberband_dt",0.0)),
     rubberband_max(pin->GetOrAddReal("problem","rubberband_max_velocity",0.0)),
     center_mass_x(0.0),
     center_mass_y(0.0),
+    center_mass_z(0.0),
     rubberband_dvx1(0.0),
     rubberband_dvx2(0.0),
     rubberband_dvx3(0.0),
@@ -685,7 +692,7 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
   headeroffset = resfile.GetPosition();
   // read the restart file
   // the file is already open and the pointer is set to after <par_end>
-  IOWrapperSizeT headersize = sizeof(int)*3+sizeof(Real)*3
+  IOWrapperSizeT headersize = sizeof(int)*3+sizeof(Real)*4
                               + sizeof(RegionSize)+sizeof(IOWrapperSizeT);
   char *headerdata = new char[headersize];
   if (Globals::my_rank == 0) { // the master process reads the header data
@@ -712,7 +719,9 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
   std::memcpy(&dt, &(headerdata[hdos]), sizeof(Real));
   hdos += sizeof(Real);
   std::memcpy(&rubberband_next_time, &(headerdata[hdos]), sizeof(Real));
-  hdos+=sizeof(Real);
+  hdos += sizeof(Real);
+  std::memcpy(&Magnetic_mult_time, &(headerdata[hdos]), sizeof(Real));
+  hdos += sizeof(Real);
   std::memcpy(&ncycle, &(headerdata[hdos]), sizeof(int));
   hdos += sizeof(int);
   std::memcpy(&datasize, &(headerdata[hdos]), sizeof(IOWrapperSizeT));

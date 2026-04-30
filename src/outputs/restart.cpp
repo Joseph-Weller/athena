@@ -79,7 +79,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool force_wr
     udsize += pm->ruser_mesh_data[n].GetSizeInBytes();
 
   headeroffset = sbuf.size()*sizeof(char) + 3*sizeof(int)+sizeof(RegionSize)
-                 + 3*sizeof(Real)+sizeof(IOWrapperSizeT)+udsize;
+                 + 4*sizeof(Real)+sizeof(IOWrapperSizeT)+udsize;
   // the size of an element of the ID and cost list
   listsize = sizeof(LogicalLocation)+sizeof(double);
   // the size of each MeshBlock
@@ -105,6 +105,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool force_wr
     resfile.Write(&(pm->time), sizeof(Real), 1);
     resfile.Write(&(pm->dt), sizeof(Real), 1);
     resfile.Write(&(pm->rubberband_next_time), sizeof(Real), 1);
+    resfile.Write(&(pm->Magnetic_mult_time), sizeof(Real), 1);
     resfile.Write(&(pm->ncycle), sizeof(int), 1);
     resfile.Write(&(datasize), sizeof(IOWrapperSizeT), 1);
 

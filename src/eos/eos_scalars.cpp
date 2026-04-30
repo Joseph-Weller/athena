@@ -32,11 +32,18 @@ void EquationOfState::PassiveScalarConservedToPrimitive(
     AthenaArray<Real> &s, const AthenaArray<Real> &u, const AthenaArray<Real> &r_old,
     AthenaArray<Real> &r,
     Coordinates *pco, int il, int iu, int jl, int ju, int kl, int ku) {
-  for (int n=0; n<NSCALARS; ++n) {
-    for (int k=kl; k<=ku; ++k) {
-      for (int j=jl; j<=ju; ++j) {
-#pragma omp simd
-        for (int i=il; i<=iu; ++i) {
+  //for (int n=0; n<NSCALARS; ++n) {
+    //for (int k=kl; k<=ku; ++k) {
+      //for (int j=jl; j<=ju; ++j) {
+//#pragma omp simd
+        //for (int i=il; i<=iu; ++i) {
+  
+  //going to attempt to add scalar renormalization below
+  for (int k=kl; k<=ku; ++k) {
+    for (int j=jl; j<=ju; ++j) {
+      for (int i=il; i<=iu; ++i) {
+	Real scalar_sum = 0.0;
+        for (int n=0; n<NSCALARS; ++n) {
           const Real &d  = u(IDN,k,j,i);
 
           //for (int n=0; n<NSCALARS; ++n) {
@@ -46,6 +53,9 @@ void EquationOfState::PassiveScalarConservedToPrimitive(
           // (multi-D fluxes may have caused it to drop below floor)
           s_n = (s_n < scalar_floor_ * d) ?  scalar_floor_ * d : s_n;
           r_n = s_n/d;
+
+          //scalar sum term
+	  scalar_sum += r_n;
           // TODO(felker): continue to monitor the acceptability of this absolute 0. floor
           // (may create very large global conservation violations, e.g. the first few
           // cycles of the slotted cylinder test)
@@ -53,6 +63,22 @@ void EquationOfState::PassiveScalarConservedToPrimitive(
           //r_n = (r_n < scalar_floor_) ? scalar_floor_ : r_n;
           //s_n = r_n * d;
         }
+	for (int n=0; n<NSCALARS; ++n) {
+	  const Real &d  = u(IDN,k,j,i);
+	  Real& s_n = s(n,k,j,i);
+          Real& r_n = r(n,k,j,i);
+
+          // apply scalar renormalization
+          Real tmp_r_n = (s_n)/(d*scalar_sum);
+
+          // correct conserved scalar
+          s_n = tmp_r_n*d;
+
+          // recapply floor
+	  s_n = (s_n < scalar_floor_ * d) ?  scalar_floor_ * d : s_n;
+          r_n = s_n/d;
+
+	}
       }
     }
   }
