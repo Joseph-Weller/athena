@@ -22,6 +22,7 @@ ghost_zones= false
 file_type  = hdf5     # Binary data dump
 variable   = prim,uov      # variables to be output
 dt         = 8820.0 #8100.0  #44100.0     # time increment between outputs
+#dcycle     = 1
 
 <output4>
 file_type = rst      #restart file
@@ -29,8 +30,8 @@ dt        = 5.0e4
 
 <time>
 cfl_number = 0.3        # The Courant, Friedrichs, & Lewy (CFL) Number
-nlim       = -1     # cycle limit
-tlim       = 882000.0  #882000.0     #88200.0 - 1 day   # time limit
+nlim       = -1 #50     # cycle limit
+tlim       = 882000.0 #30.0 #882000.0  #882000.0     #88200.0 - 1 day   # time limit
 integrator  = rk2       # time integration algorithm
 xorder      = 3         # order of spatial reconstruction
 ncycle_out  = 1         # interval for stdout summary info
@@ -55,7 +56,7 @@ ix3_bc     = user   # inner-X3 boundary flag
 ox3_bc     = user   # outer-X3 boundary flag
 
 refinement  = adaptive  # Adaptive Mesh Refinement
-numlevel    = 6         # Number of AMR levels
+numlevel    = 5         # Number of AMR levels
 derefine_count = 5      # Number of Steps
 
 <meshblock>
@@ -82,6 +83,7 @@ dfloor = 1.0e-8  # density floor
 pfloor = 1.0e-8  # pressure floor
 efloor       = 1.e10  # specific internal energy floor (in erg/g)
 eceiling     = 1.e13  # specific internal energy ceiling (in erg/g)
+max_velocity = 3.0e6  # maximum velocity permitted (in cm/s)
 
 <problem>
 #pamb          = 1.0e-9    # ambient pressure
@@ -96,13 +98,13 @@ r_max_i         = 4.796e8   #r_max       = 1.0    # Maximum radius Impactor
 
 vx            = 0.0    # Bump x velocity
 vy            = 0.0    # Bump y velocity
-x_disp     = 1.0845e9 #1.626e9  #2.55      # second polytrope x-axis center offset from middle
-y_disp     = 6.703e8 #7.653e8  #1.2      # second polytrope y-axis center offset from middle
+x_disp     = 3.2e9 #1.0845e9 #1.626e9  #2.55      # second polytrope x-axis center offset from middle
+y_disp     = 1.091e9 #7.0e8 #9.0e8 #6.703e8 #7.653e8  #1.2      # second polytrope y-axis center offset from middle
 vcoll      = -1.2 #-8.021e5  # collision velocity in units of the escape velocity
 grav_const    = 6.67e-8  #grav_const = 9.81    # gravitational constant value
 njeans     =  1e-7  #64       # Jeans length mumber for AMR
-m_refine      = 3.18e20 #m_refine   = 2.0e-6   # Mass refinement value for AMR
-atm_merge  = 0.0001     # percent removed from outer layer of polytrope to begin atmosphere
+m_refine      = 3.18e21 #m_refine   = 2.0e-6   # Mass refinement value for AMR
+atm_merge  = 0.02     # percent removed from outer layer of polytrope to begin atmosphere
 atm_ext_e    = 1.7      # Max radius of Earth atmosphere, should be >1.0, 1.0 is one earth radius
 atm_ext_i    = 1.3      # Max radius of impactor atmosphere, should be >1.0, 1.0 is one earth radius
 
@@ -111,7 +113,10 @@ rubberband_dt = 1.8e3           # rubberband_dt
 rubberband_max_velocity = 5.e4  # maximum rubberband velocity
 
 c              = 2.9979e10    # speed of light
-I0_impactor    = 2.3680e22    # loop current (for 1 kG field)
-I0_target      = 3.4007e22    # loop current (for 1 kG field)
+I0_impactor    = 2.3680e22 #5.92e23 #25 kG #2.3680e24    # 100 kG  #2.3680e22    # loop current (for 1 kG field)
+I0_target      = 3.4007e22 #8.5e23 #25 kG #3.4007e24    # 100 kG  #3.4007e22    # loop current (for 1 kG field)
 angle_target   = 0.0          # angle between target dipole axis and z-axis
 angle_impactor = 90.0         # angle between impactor dipole axis and z-axis
+
+Magnetic_mult_factor = 1.0 #4.0
+Magnetic_mult_time = 10e20 #252000 #70 hours
