@@ -944,10 +944,11 @@ void Rubber(MeshBlock *pmb, const Real time, const Real dt,
   //std::cout<< pmb->pmy_mesh->sanity <<std::endl; 
   //std::cout<< pmb->pmy_mesh->rubberband_dvx1 << std::endl;
   if(pmb->pmy_mesh->apply_rubberband){
-    //std::cout<< "rubberbandding active" <<std::endl;
+    std::cout<< "rubberbandding active" <<std::endl;
     for (int k=pmb->ks; k<=pmb->ke; ++k) {
       for (int j=pmb->js; j<=pmb->je; ++j) {
         for (int i=pmb->is; i<=pmb->ie; ++i) {
+          
 	  Real dvx = pmb->pmy_mesh->rubberband_dvx1;
           Real dvy = pmb->pmy_mesh->rubberband_dvx2;
           Real dvz = pmb->pmy_mesh->rubberband_dvx3;
@@ -963,7 +964,7 @@ void Rubber(MeshBlock *pmb, const Real time, const Real dt,
           cons(IM3,k,j,i) += rho*dvz;
           cons(IEN,k,j,i) += rho*(vx*dvx + vy*dvy + vz*dvz
                           + 0.5*(dvx*dvx + dvy*dvy + dvz*dvz));
-          
+		
 	  //pmb->phydro->u(IM1,k,j,i) += (pmb->phydro->w(IDN,k,j,i)
           //                              * pmb->pmy_mesh->rubberband_dvx1);
           //pmb->phydro->u(IM2,k,j,i) += (pmb->phydro->w(IDN,k,j,i)
