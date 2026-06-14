@@ -944,26 +944,42 @@ void Rubber(MeshBlock *pmb, const Real time, const Real dt,
   //std::cout<< pmb->pmy_mesh->sanity <<std::endl; 
   //std::cout<< pmb->pmy_mesh->rubberband_dvx1 << std::endl;
   if(pmb->pmy_mesh->apply_rubberband){
-    std::cout<< "rubberbandding active" <<std::endl;
+    //std::cout<< "rubberbandding active" <<std::endl;
     for (int k=pmb->ks; k<=pmb->ke; ++k) {
       for (int j=pmb->js; j<=pmb->je; ++j) {
         for (int i=pmb->is; i<=pmb->ie; ++i) {
-          pmb->phydro->u(IM1,k,j,i) += (pmb->phydro->w(IDN,k,j,i)
-                                        * pmb->pmy_mesh->rubberband_dvx1);
-          pmb->phydro->u(IM2,k,j,i) += (pmb->phydro->w(IDN,k,j,i)
-                                        * pmb->pmy_mesh->rubberband_dvx2);
-          pmb->phydro->u(IM3,k,j,i) += (pmb->phydro->w(IDN,k,j,i)
-                                        * pmb->pmy_mesh->rubberband_dvx3);
-          pmb->phydro->u(IEN,k,j,i) += (0.5*pmb->phydro->w(IDN,k,j,i)
-                                        * (2. * pmb->phydro->w(IVX,k,j,i)
-                                           * pmb->pmy_mesh->rubberband_dvx1
-                                           + SQR(pmb->pmy_mesh->rubberband_dvx1)
-                                           + 2. * pmb->phydro->w(IVY,k,j,i)
-                                           * pmb->pmy_mesh->rubberband_dvx2
-                                           + SQR(pmb->pmy_mesh->rubberband_dvx2)
-                                           + 2. * pmb->phydro->w(IVZ,k,j,i)
-                                           * pmb->pmy_mesh->rubberband_dvx3
-                                           + SQR(pmb->pmy_mesh->rubberband_dvx3)));
+	  Real dvx = pmb->pmy_mesh->rubberband_dvx1;
+          Real dvy = pmb->pmy_mesh->rubberband_dvx2;
+          Real dvz = pmb->pmy_mesh->rubberband_dvx3;
+
+          Real rho = cons(IDN,k,j,i);
+
+          Real vx = cons(IM1,k,j,i)/rho;
+          Real vy = cons(IM2,k,j,i)/rho;
+          Real vz = cons(IM3,k,j,i)/rho;
+
+          cons(IM1,k,j,i) += rho*dvx;
+          cons(IM2,k,j,i) += rho*dvy;
+          cons(IM3,k,j,i) += rho*dvz;
+          cons(IEN,k,j,i) += rho*(vx*dvx + vy*dvy + vz*dvz
+                          + 0.5*(dvx*dvx + dvy*dvy + dvz*dvz));
+          
+	  //pmb->phydro->u(IM1,k,j,i) += (pmb->phydro->w(IDN,k,j,i)
+          //                              * pmb->pmy_mesh->rubberband_dvx1);
+          //pmb->phydro->u(IM2,k,j,i) += (pmb->phydro->w(IDN,k,j,i)
+          //                              * pmb->pmy_mesh->rubberband_dvx2);
+          //pmb->phydro->u(IM3,k,j,i) += (pmb->phydro->w(IDN,k,j,i)
+          //                              * pmb->pmy_mesh->rubberband_dvx3);
+          //pmb->phydro->u(IEN,k,j,i) += (0.5*pmb->phydro->w(IDN,k,j,i)
+          //                              * (2. * pmb->phydro->w(IVX,k,j,i)
+          //                                 * pmb->pmy_mesh->rubberband_dvx1
+          //                                 + SQR(pmb->pmy_mesh->rubberband_dvx1)
+          //                                 + 2. * pmb->phydro->w(IVY,k,j,i)
+          //                                 * pmb->pmy_mesh->rubberband_dvx2
+          //                                 + SQR(pmb->pmy_mesh->rubberband_dvx2)
+          //                                 + 2. * pmb->phydro->w(IVZ,k,j,i)
+          //                                 * pmb->pmy_mesh->rubberband_dvx3
+          //                                 + SQR(pmb->pmy_mesh->rubberband_dvx3)));
         }
       }
     }
