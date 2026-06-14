@@ -135,7 +135,7 @@ void EquationOfState::ConservedToPrimitive(
 	// apply specific internal energy ceiling
         if (w_e > specific_intenergy_ceiling_) {
           // correct total energy
-          u_e = w_d*specific_intenergy_ceiling_ + ke + pb;
+          u_e = w_d*specific_intenergy_ceiling_ + ke;
 
           // recalculate specific internal energy
           w_e = di * (u_e - ke);
