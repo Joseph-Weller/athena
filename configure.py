@@ -14,6 +14,7 @@
 #   --flux=xxx        use xxx as the Riemann solver
 #   --nghost=xxx      set NGHOST=xxx
 #   --nscalars=xxx    set NSCALARS=xxx
+#   --nspecies=xxx    set NSPECIES=xxx
 #   -eos_table        enable EOS table
 #   -b                enable magnetic fields
 #   -s                enable special relativity
@@ -29,6 +30,11 @@
 #   -fft              enable FFT (requires the FFTW library)
 #   --fftw_path=path  path to FFTW libraries (requires the FFTW library)
 #   --grav=xxx        use xxx as the self-gravity solver
+#   --chemistry=xxx   enable chemistry, use xxx as chemical network
+#   --kida_rates=xxx  add special rates xxx to kida network
+#   --chem_ode_solver=xxx  ode solver xxx for chemistry
+#   --cvode_path=path path to CVODE libraries (cvode solver requires the library)
+#   --chem_radiation=xxx  enable radiative transfer, use xxx for integrator
 #   --cxx=xxx         use xxx as the C++ compiler (works w/ or w/o -mpi)
 #   --ccmd=name       use name as the command to call the (non-MPI) C++ compiler
 #   --mpiccmd=name    use name as the command to call the MPI C++ compiler
@@ -37,6 +43,10 @@
 #   --include=path    use -Ipath when compiling
 #   --lib_path=path   use -Lpath when linking
 #   --lib=xxx         use -lxxx when linking
+#   -nr_radiation        turn on non-relativistic radiation transport
+#   -implicit_radiation  implicit radiation transport module
+#   -cr                  enable cosmic ray transport
+#   -crdiff              enable cosmic ray diffusion with Multigrid
 # ----------------------------------------------------------------------------------------
 
 # Modules
@@ -81,8 +91,6 @@ parser.add_argument(
         'cylindrical',
         'spherical_polar',
         'minkowski',
-        'sinusoidal',
-        'tilted',
         'schwarzschild',
         'kerr-schild',
         'gr_user'],
@@ -111,6 +119,11 @@ parser.add_argument('--nghost',
 parser.add_argument('--nscalars',
                     default='0',
                     help='set number of passive scalars')
+
+# --nspecies=[value] argument
+parser.add_argument('--nspecies',
+                    default='0',
+                    help='set number of chemical species')
 
 # -b argument
 parser.add_argument('-b',
@@ -189,6 +202,36 @@ parser.add_argument('--fftw_path',
                     default='',
                     help='path to FFTW libraries')
 
+# --chemistry argument
+parser.add_argument('--chemistry',
+                    default=None,
+                    choices=["gow17", "H2", "kida", "G14Sod"],
+                    help='select chemical network')
+
+# --kida_rates argument
+parser.add_argument('--kida_rates',
+                    default=None,
+                    choices=["H2", "gow17", "nitrogen", "nitrogen_gas_Sipila"],
+                    help='select special rates for kida network')
+
+# --chem_radiation argument
+parser.add_argument('--chem_radiation',
+                    default=None,
+                    choices=["const", "six_ray"],
+                    help='enable and select radiative transfer method for chemistry')
+
+# --chem_ode_solver argument
+parser.add_argument('--chem_ode_solver',
+                    default=None,
+                    choices=["cvode", "forward_euler"],
+                    help='ode solver for chemistry')
+
+# --cvode_path argument
+parser.add_argument('--cvode_path',
+                    type=str,
+                    default='',
+                    help='path to CVODE libraries')
+
 # -hdf5 argument
 parser.add_argument('-hdf5',
                     action='store_true',
@@ -206,6 +249,30 @@ parser.add_argument('--hdf5_path',
                     default='',
                     help='path to HDF5 libraries')
 
+# -nr_radiation argument
+parser.add_argument('-nr_radiation',
+                    action='store_true',
+                    default=False,
+                    help='enable non-relativistic radiative transfer')
+
+# -implicit_radiation argument
+parser.add_argument('-implicit_radiation',
+                    action='store_true',
+                    default=False,
+                    help='enable radiative transfer')
+
+# -cosmic ray argument
+parser.add_argument('-cr',
+                    action='store_true',
+                    default=False,
+                    help='enable cosmic ray transport')
+
+# -cosmic ray diffusion argument
+parser.add_argument('-crdiff',
+                    action='store_true',
+                    default=False,
+                    help='enable implicit cosmic ray diffusion')
+
 # The main choices for --cxx flag, using "ctype[-suffix]" formatting, where "ctype" is the
 # major family/suite/group of compilers and "suffix" may represent variants of the
 # compiler version and/or predefined sets of compiler options. The C++ compiler front ends
@@ -216,14 +283,15 @@ cxx_choices = [
     'g++',
     'g++-simd',
     'icpx',
+    'icpx-old',
     'icpc',
     'icpc-debug',
     'icpc-phi',
     'cray',
-    'bgxlc++',
     'clang++',
     'clang++-simd',
     'clang++-apple',
+    'aocc',
 ]
 
 
@@ -231,9 +299,6 @@ def c_to_cpp(arg):
     arg = arg.replace('gcc', 'g++', 1)
     arg = arg.replace('icc', 'icpc', 1)
     arg = arg.replace('icx', 'icpx', 1)
-    if arg == 'bgxl' or arg == 'bgxlc':
-        arg = 'bgxlc++'
-
     if arg == 'clang':
         arg = 'clang++'
     else:
@@ -360,6 +425,31 @@ if args['eos'][:10] == 'planetary/':
         raise SystemExit('### CONFIGURE ERROR: '
                          + 'Planetary EOS is incompatible with flux ' + args['flux'])
 
+if args['chemistry'] is None and args['chem_ode_solver'] is not None:
+    raise SystemExit('### CONFIGURE ERROR: must choose chemistry network for ode solver.')
+
+if args['chemistry'] is not None and args['chem_ode_solver'] is None:
+    raise SystemExit('### CONFIGURE ERROR: must choose ode solver for chemistry.')
+
+if args['chemistry'] == 'kida' and args['kida_rates'] is None:
+    raise SystemExit('### CONFIGURE ERROR: must provide rates for kida chemistry.')
+
+if args['chem_radiation'] == 'six_ray' and (
+        args['chemistry'] != 'gow17' and args['chemistry'] != 'kida'):
+    raise SystemExit('### CONFIGURE ERROR: six ray radiation'
+                     + 'only compatible with gow17 or kida chemistry enabled.')
+
+if args['chem_ode_solver'] == 'cvode' and args['cvode_path'] == '':
+    raise SystemExit('### CONFIGURE ERROR: must provide library path to cvode.')
+
+if args['g'] and (args['nr_radiation'] or args['implicit_radiation']):
+    raise SystemExit('### CONFIGURE ERROR: '
+                     + ' GR is incompatible with nr_radiation or implicit_radiation')
+
+if args['nr_radiation'] and args['implicit_radiation']:
+    raise SystemExit('### CONFIGURE ERROR: '
+                     + ' nr_radiation and implicit_radiation cannot be used together')
+
 # --- Step 3. Set definitions and Makefile options based on above argument
 
 # Prepare dictionaries of substitutions to be made
@@ -412,6 +502,9 @@ definitions['NUMBER_GHOST_CELLS'] = args['nghost']
 # --nscalars=[value] argument
 definitions['NUMBER_PASSIVE_SCALARS'] = args['nscalars']
 
+# --nspecies=[value] argument
+definitions['NUMBER_CHEMICAL_SPECIES'] = args['nspecies']
+
 # -b argument
 # set variety of macros based on whether MHD/hydro or adi/iso are defined
 if args['b']:
@@ -460,7 +553,6 @@ else:
 # -s, -g, and -t arguments
 definitions['RELATIVISTIC_DYNAMICS'] = '1' if args['s'] or args['g'] else '0'
 definitions['GENERAL_RELATIVITY'] = '1' if args['g'] else '0'
-definitions['FRAME_TRANSFORMATIONS'] = '1' if args['t'] else '0'
 if args['s']:
     makefile_options['EOS_FILE'] += '_sr'
     if definitions['GENERAL_EOS'] != '0':
@@ -473,6 +565,37 @@ if args['g']:
     makefile_options['RSOLVER_FILE'] += '_rel'
     if not args['t']:
         makefile_options['RSOLVER_FILE'] += '_no_transform'
+
+
+# -radiation argument
+definitions['NRAD_VARIABLES'] = '0'
+
+if args['nr_radiation']:
+    definitions['NR_RADIATION_ENABLED'] = '1'
+    definitions['NRAD_VARIABLES'] = '14'
+else:
+    definitions['NR_RADIATION_ENABLED'] = '0'
+
+if args['implicit_radiation']:
+    definitions['IM_RADIATION_ENABLED'] = '1'
+    definitions['NRAD_VARIABLES'] = '14'
+else:
+    definitions['IM_RADIATION_ENABLED'] = '0'
+
+# -cr argument
+definitions['NCR_VARIABLES'] = '0'
+if args['cr']:
+    definitions['CR_ENABLED'] = '1'
+    definitions['NCR_VARIABLES'] = '4'
+else:
+    definitions['CR_ENABLED'] = '0'
+
+# -crdiff argument
+if args['crdiff']:
+    definitions['CRDIFFUSION_ENABLED'] = '1'
+else:
+    definitions['CRDIFFUSION_ENABLED'] = '0'
+
 
 # --cxx=[name] argument
 if args['cxx'] == 'g++':
@@ -500,7 +623,7 @@ if args['cxx'] == 'g++-simd':
     makefile_options['LINKER_FLAGS'] = ''
     makefile_options['LIBRARY_FLAGS'] = ''
 if args['cxx'] == 'icpx':
-    # Next-gen LLVM-based Intel oneAPI DPC++/C++ Compiler
+    # New Versions of LLVM-based Intel oneAPI DPC++/C++ Compiler
     definitions['COMPILER_CHOICE'] = 'icpx'
     definitions['COMPILER_COMMAND'] = makefile_options['COMPILER_COMMAND'] = 'icpx'
     makefile_options['PREPROCESSOR_FLAGS'] = ''
@@ -508,9 +631,22 @@ if args['cxx'] == 'icpx':
     # Compiler options
     makefile_options['COMPILER_FLAGS'] = (
       '-O3 -std=c++11 -ipo -xhost -qopenmp-simd '
+      '-Wno-tautological-constant-compare -Wno-array-bounds'
     )
     # Currently unsupported, but "options to be supported" according to icpx
-    # -qnextgen-diag: '-inline-forceinline -qopt-prefetch=4 '
+    # -qnextgen-diag: '-inline-forceinline'
+    # -qopt-prefetch=4 is supported but it crashes with version 2024.0 (2024.2 is OK)
+    makefile_options['LINKER_FLAGS'] = ''
+    makefile_options['LIBRARY_FLAGS'] = ''
+if args['cxx'] == 'icpx-old':
+    # Old versions of LLVM-based Intel oneAPI DPC++/C++ Compiler (backward compatibility)
+    definitions['COMPILER_CHOICE'] = 'icpx'
+    definitions['COMPILER_COMMAND'] = makefile_options['COMPILER_COMMAND'] = 'icpx'
+    makefile_options['PREPROCESSOR_FLAGS'] = ''
+    makefile_options['COMPILER_FLAGS'] = (
+      '-O3 -std=c++11 -ipo -xhost -qopenmp-simd '
+      '-Wno-tautological-constant-compare -Wno-array-bounds'
+    )
     makefile_options['LINKER_FLAGS'] = ''
     makefile_options['LIBRARY_FLAGS'] = ''
 if args['cxx'] == 'icpc':
@@ -520,7 +656,8 @@ if args['cxx'] == 'icpc':
     makefile_options['PREPROCESSOR_FLAGS'] = ''
     makefile_options['COMPILER_FLAGS'] = (
       '-O3 -std=c++11 -ipo -xhost -inline-forceinline -qopenmp-simd -qopt-prefetch=4 '
-      '-qoverride-limits'  # -qopt-report-phase=ipo (does nothing without -ipo)
+      '-qoverride-limits '  # -qopt-report-phase=ipo (does nothing without -ipo)
+      '-diag-disable=10441'  # The Intel(R) C++ Compiler Classic (ICC) is deprecated
     )
     # -qopt-zmm-usage=high'  # typically harms multi-core performance on Skylake Xeon
     makefile_options['LINKER_FLAGS'] = ''
@@ -533,7 +670,8 @@ if args['cxx'] == 'icpc-debug':
     makefile_options['PREPROCESSOR_FLAGS'] = ''
     makefile_options['COMPILER_FLAGS'] = (
       '-O3 -std=c++11 -xhost -qopenmp-simd -fp-model precise -qopt-prefetch=4 '
-      '-qopt-report=5 -qopt-report-phase=openmp,vec -g -qoverride-limits'
+      '-qopt-report=5 -qopt-report-phase=openmp,vec -g -qoverride-limits '
+      '-diag-disable=10441'
     )
     makefile_options['LINKER_FLAGS'] = ''
     makefile_options['LIBRARY_FLAGS'] = ''
@@ -550,40 +688,20 @@ if args['cxx'] == 'icpc-phi':
     makefile_options['LINKER_FLAGS'] = ''
     makefile_options['LIBRARY_FLAGS'] = ''
 if args['cxx'] == 'cray':
-    # Cray Compiling Environment 8.4 (2015-09-24) introduces C++11 feature completeness
-    # (except "alignas"). v8.6 is C++14 feature-complete
+    # New HPE Cray Compiling Environment based on clang (2019-)
+    # e.g. NAOJ's HPE Cray XD2000 with Sapphire Rapids
     definitions['COMPILER_CHOICE'] = 'cray'
     definitions['COMPILER_COMMAND'] = makefile_options['COMPILER_COMMAND'] = 'CC'
     makefile_options['PREPROCESSOR_FLAGS'] = ''
-    makefile_options['COMPILER_FLAGS'] = '-O3 -h std=c++11 -h aggress -h vector3 -hfp3'
-    makefile_options['LINKER_FLAGS'] = '-hwp -hpl=obj/lib'
+    makefile_options['COMPILER_FLAGS'] = '-O3 -std=c++11 -flto'  # -Ofast
+    makefile_options['LINKER_FLAGS'] = ''
     makefile_options['LIBRARY_FLAGS'] = '-lm'
-if args['cxx'] == 'bgxlc++':
-    # IBM XL C/C++ for BG/Q is NOT C++11 feature-complete as of v12.1.0.15 (2017-12-22)
-    # suppressed messages:
-    #   1500-036:  The NOSTRICT option has the potential to alter the program's semantics
-    #   1540-1401: An unknown "pragma simd" is specified
-    #   1586-083:  ld option ignored by IPA
-    #   1586-233:  Duplicate definition of symbol ignored
-    #   1586-267:  Inlining of specified subprogram failed due to the presence of a C++
-    #                exception handler
-    definitions['COMPILER_CHOICE'] = 'bgxlc++'
-    definitions['COMPILER_COMMAND'] = makefile_options['COMPILER_COMMAND'] = 'bgxlc++'
-    makefile_options['PREPROCESSOR_FLAGS'] = ''
-    makefile_options['COMPILER_FLAGS'] = (
-      '-O3 -qhot=level=1:vector -qinline=level=5:auto -qipa=level=1:noobject'
-      ' -qstrict=subnormals -qmaxmem=150000 -qlanglvl=extended0x -qsuppress=1500-036'
-      ' -qsuppress=1540-1401 -qsuppress=1586-083 -qsuppress=1586-233'
-      ' -qsuppress=1586-267'
-    )
-    makefile_options['LINKER_FLAGS'] = makefile_options['COMPILER_FLAGS']
-    makefile_options['LIBRARY_FLAGS'] = ''
 if args['cxx'] == 'clang++':
     # Clang is C++11 feature-complete since v3.3 (2013-06-17)
     definitions['COMPILER_CHOICE'] = 'clang++'
     definitions['COMPILER_COMMAND'] = makefile_options['COMPILER_COMMAND'] = 'clang++'
     makefile_options['PREPROCESSOR_FLAGS'] = ''
-    makefile_options['COMPILER_FLAGS'] = '-O3 -std=c++11'
+    makefile_options['COMPILER_FLAGS'] = '-O3 -std=c++11 -flto'
     makefile_options['LINKER_FLAGS'] = ''
     makefile_options['LIBRARY_FLAGS'] = ''
 if args['cxx'] == 'clang++-simd':
@@ -592,7 +710,7 @@ if args['cxx'] == 'clang++-simd':
     definitions['COMPILER_CHOICE'] = 'clang++-simd'
     definitions['COMPILER_COMMAND'] = makefile_options['COMPILER_COMMAND'] = 'clang++'
     makefile_options['PREPROCESSOR_FLAGS'] = ''
-    makefile_options['COMPILER_FLAGS'] = '-O3 -std=c++11 -fopenmp-simd'
+    makefile_options['COMPILER_FLAGS'] = '-O3 -std=c++11 -flto -fopenmp-simd'
     makefile_options['LINKER_FLAGS'] = ''
     makefile_options['LIBRARY_FLAGS'] = ''
 if args['cxx'] == 'clang++-apple':
@@ -603,6 +721,84 @@ if args['cxx'] == 'clang++-apple':
     makefile_options['COMPILER_FLAGS'] = '-O3 -std=c++11'
     makefile_options['LINKER_FLAGS'] = ''
     makefile_options['LIBRARY_FLAGS'] = ''
+if args['cxx'] == 'aocc':
+    # AMD Optimizing C++ Compiler based on clang
+    definitions['COMPILER_CHOICE'] = 'aocc'
+    definitions['COMPILER_COMMAND'] = makefile_options['COMPILER_COMMAND'] = 'clang++'
+    makefile_options['PREPROCESSOR_FLAGS'] = ''
+    makefile_options['COMPILER_FLAGS'] = '-O3 -std=c++11 -flto -zopt'
+    makefile_options['LINKER_FLAGS'] = ''
+    makefile_options['LIBRARY_FLAGS'] = ''
+
+# --chemistry=[network] argument
+makefile_options['CHEMISTRY_FILE'] = \
+    'src/chemistry/network_wrapper.cpp src/chemistry/utils/*.cpp'
+if args['chemistry'] is not None:
+    definitions['CHEMISTRY_ENABLED'] = '1'
+    definitions['CHEMNETWORK_HEADER'] = '../chemistry/network/' \
+                                        + args['chemistry'] + '.hpp'
+    makefile_options['CHEMNET_FILE'] = 'src/chemistry/network/' \
+        + args['chemistry'] + '.cpp'
+    # specify the number of species for each network
+    if args['chemistry'] == "gow17":
+        definitions['NUMBER_CHEMICAL_SPECIES'] = '12'
+    elif args['chemistry'] == "H2":
+        definitions['NUMBER_CHEMICAL_SPECIES'] = '2'
+    elif args['chemistry'] == "G14Sod":
+        definitions['NUMBER_CHEMICAL_SPECIES'] = '8'
+else:
+    definitions['CHEMISTRY_ENABLED'] = '0'
+    definitions['NUMBER_CHEMICAL_SPECIES'] = '0'
+    makefile_options['CHEMNET_FILE'] = 'src/chemistry/network/none.cpp'
+    definitions['CHEMNETWORK_HEADER'] = '../chemistry/network/chem_network.hpp'
+
+# check number of species and scalars
+if definitions['NUMBER_PASSIVE_SCALARS'] == '0':
+    definitions['NUMBER_PASSIVE_SCALARS'] = definitions['NUMBER_CHEMICAL_SPECIES']
+elif int(definitions['NUMBER_PASSIVE_SCALARS']) < int(
+                                     definitions['NUMBER_CHEMICAL_SPECIES']):
+    raise SystemExit(
+      '### CONFIGURE ERROR: number of passive scalars ({:s})'.format(
+        definitions['NUMBER_PASSIVE_SCALARS'])
+      + ' less than the number of chemical species ({:s})!'.format(
+        definitions['NUMBER_CHEMICAL_SPECIES']))
+
+# --kida_rates=[rates] argument
+if args['kida_rates'] is not None:
+    if args['chemistry'] == "kida":
+        makefile_options['CHEMNET_FILE'] += (
+            ' src/chemistry/network/kida_network_files/'
+            + args['kida_rates']
+            + '/kida_'
+            + args['kida_rates']
+            + '.cpp')
+
+# --chem_ode_solver=[solver] argument
+if args['chem_ode_solver'] == 'cvode':
+    definitions['CVODE_OPTION'] = 'CVODE'
+    makefile_options['LIBRARY_FLAGS'] += ' -lsundials_cvode -lsundials_nvecserial'
+else:
+    definitions['CVODE_OPTION'] = 'NO_CVODE'
+if args['chem_ode_solver'] is not None:
+    makefile_options['CHEM_ODE_SOLVER_FILE'] = args['chem_ode_solver']+'.cpp'
+else:
+    makefile_options['CHEM_ODE_SOLVER_FILE'] = 'forward_euler.cpp'
+
+# --cvode_path=[path] argument
+if args['cvode_path'] != '':
+    makefile_options['PREPROCESSOR_FLAGS'] += '-I%s/include' % args['cvode_path']
+    makefile_options['LINKER_FLAGS'] += '-L%s/lib' % args['cvode_path']
+    makefile_options['LINKER_FLAGS'] += " -Wl,-rpath," + '%s/lib' % args['cvode_path']
+
+# --chem_radiation=[chem_radiation] argument
+if args['chem_radiation'] is not None:
+    definitions['CHEMRADIATION_ENABLED'] = '1'
+    makefile_options['CHEMRADIATION_FILE'] = args['chem_radiation']+'.cpp'
+    definitions['CHEMRADIATION_INTEGRATOR'] = args['chem_radiation']
+else:
+    definitions['CHEMRADIATION_ENABLED'] = '0'
+    makefile_options['CHEMRADIATION_FILE'] = 'const.cpp'
+    definitions['CHEMRADIATION_INTEGRATOR'] = 'none'
 
 # -float argument
 if args['float']:
@@ -612,23 +808,20 @@ else:
 
 # -debug argument
 if args['debug']:
-    definitions['DEBUG_OPTION'] = 'DEBUG'
+    definitions['DEBUG_OPTION'] = '1'
     # Completely replace the --cxx= sets of default compiler flags, disable optimization,
     # and emit debug symbols in the compiled binaries
     if (args['cxx'] == 'g++' or args['cxx'] == 'g++-simd'
-            or args['cxx'] == 'icpx'
+            or args['cxx'] == 'icpx' or args['cxx'] == 'icpx-old'
             or args['cxx'] == 'icpc' or args['cxx'] == 'icpc-debug'
             or args['cxx'] == 'clang++' or args['cxx'] == 'clang++-simd'
-            or args['cxx'] == 'clang++-apple'):
-        makefile_options['COMPILER_FLAGS'] = '-O0 --std=c++11 -g'  # -Og
-    if args['cxx'] == 'cray':
-        makefile_options['COMPILER_FLAGS'] = '-O0 -h std=c++11'
-    if args['cxx'] == 'bgxlc++':
-        makefile_options['COMPILER_FLAGS'] = '-O0 -g -qlanglvl=extended0x'
+            or args['cxx'] == 'clang++-apple' or args['cxx'] == 'cray'
+            or args['cxx'] == 'aocc'):
+        makefile_options['COMPILER_FLAGS'] = '-O0 -std=c++11 -g'  # -Og
     if args['cxx'] == 'icpc-phi':
-        makefile_options['COMPILER_FLAGS'] = '-O0 --std=c++11 -g -xMIC-AVX512'
+        makefile_options['COMPILER_FLAGS'] = '-O0 -std=c++11 -g -xMIC-AVX512'
 else:
-    definitions['DEBUG_OPTION'] = 'NOT_DEBUG'
+    definitions['DEBUG_OPTION'] = '0'
 
 # -coverage argument
 if args['coverage']:
@@ -642,7 +835,6 @@ if args['coverage']:
             ' -fno-inline -fno-exceptions -fno-elide-constructors'
             )
     if (args['cxx'] == 'icpc' or args['cxx'] == 'icpc-debug'
-            or args['cxx'] == 'icpx'
             or args['cxx'] == 'icpc-phi'):
         makefile_options['COMPILER_FLAGS'] += ' -O0 -prof-gen=srcpos'
     if (args['cxx'] == 'clang++' or args['cxx'] == 'clang++-simd'
@@ -651,7 +843,8 @@ if args['coverage']:
         makefile_options['COMPILER_FLAGS'] += (
             ' -O0 -fprofile-instr-generate -fcoverage-mapping'
             )  # use --coverage to produce GCC-compatible .gcno, .gcda output for gcov
-    if (args['cxx'] == 'cray' or args['cxx'] == 'bgxlc++'):
+    if (args['cxx'] == 'icpx' or args['cxx'] == 'icpx-old'
+            or args['cxx'] == 'cray' or args['cxx'] == 'aocc'):
         raise SystemExit(
             '### CONFIGURE ERROR: No code coverage avaialbe for selected compiler!')
 else:
@@ -674,16 +867,13 @@ else:
 if args['mpi']:
     definitions['MPI_OPTION'] = 'MPI_PARALLEL'
     if (args['cxx'] == 'g++' or args['cxx'] == 'icpc' or args['cxx'] == 'icpc-debug'
-            or args['cxx'] == 'icpx'
+            or args['cxx'] == 'icpx' or args['cxx'] == 'icpx-old'
             or args['cxx'] == 'icpc-phi' or args['cxx'] == 'g++-simd'
             or args['cxx'] == 'clang++' or args['cxx'] == 'clang++-simd'
-            or args['cxx'] == 'clang++-apple'):
+            or args['cxx'] == 'clang++-apple' or args['cxx'] == 'aocc'):
         definitions['COMPILER_COMMAND'] = makefile_options['COMPILER_COMMAND'] = 'mpicxx'
     if args['cxx'] == 'cray':
-        makefile_options['COMPILER_FLAGS'] += ' -h mpi1'
-    if args['cxx'] == 'bgxlc++':
-        definitions['COMPILER_COMMAND'] = makefile_options['COMPILER_COMMAND'] = 'mpixlcxx'  # noqa
-    # --mpiccmd=[name] argument
+        definitions['COMPILER_COMMAND'] = makefile_options['COMPILER_COMMAND'] = 'CC'
     if args['mpiccmd'] is not None:
         definitions['COMPILER_COMMAND'] = makefile_options['COMPILER_COMMAND'] = args['mpiccmd']  # noqa
 else:
@@ -693,7 +883,8 @@ else:
 if args['omp']:
     definitions['OPENMP_OPTION'] = 'OPENMP_PARALLEL'
     if (args['cxx'] == 'g++' or args['cxx'] == 'g++-simd' or args['cxx'] == 'clang++'
-            or args['cxx'] == 'clang++-simd'):
+            or args['cxx'] == 'clang++-simd' or args['cxx'] == 'cray'
+            or args['cxx'] == 'aocc'):
         makefile_options['COMPILER_FLAGS'] += ' -fopenmp'
     if (args['cxx'] == 'clang++-apple'):
         # Apple Clang disables the front end OpenMP driver interface; enable it via the
@@ -701,21 +892,12 @@ if args['omp']:
         makefile_options['COMPILER_FLAGS'] += ' -Xpreprocessor -fopenmp'
         makefile_options['LIBRARY_FLAGS'] += ' -lomp'
     if (args['cxx'] == 'icpc' or args['cxx'] == 'icpc-debug' or args['cxx'] == 'icpc-phi'
-            or args['cxx'] == 'icpx'):
+            or args['cxx'] == 'icpx' or args['cxx'] == 'icpx-old'):
         makefile_options['COMPILER_FLAGS'] += ' -qopenmp'
-    if args['cxx'] == 'cray':
-        makefile_options['COMPILER_FLAGS'] += ' -homp'
-    if args['cxx'] == 'bgxlc++':
-        # use thread-safe version of compiler
-        definitions['COMPILER_COMMAND'] += '_r'
-        makefile_options['COMPILER_COMMAND'] += '_r'
-        makefile_options['COMPILER_FLAGS'] += ' -qsmp'
 else:
     definitions['OPENMP_OPTION'] = 'NOT_OPENMP_PARALLEL'
-    if args['cxx'] == 'cray':
-        makefile_options['COMPILER_FLAGS'] += ' -hnoomp'
-    if (args['cxx'] == 'icpc' or args['cxx'] == 'icpc-debug' or args['cxx'] == 'icpc-phi'
-            or args['cxx'] == 'icpx'):
+    if (args['cxx'] == 'icpc' or args['cxx'] == 'icpc-debug'
+            or args['cxx'] == 'icpc-phi'):
         # suppressed messages:
         #   3180: pragma omp not recognized
         makefile_options['COMPILER_FLAGS'] += ' -diag-disable 3180'
@@ -758,20 +940,11 @@ if args['hdf5']:
         makefile_options['LINKER_FLAGS'] += ' -L{0}/lib'.format(args['hdf5_path'])
     if (args['cxx'] == 'g++' or args['cxx'] == 'g++-simd'
             or args['cxx'] == 'cray' or args['cxx'] == 'icpc'
-            or args['cxx'] == 'icpx'
+            or args['cxx'] == 'icpx' or args['cxx'] == 'icpx-old'
             or args['cxx'] == 'icpc-debug' or args['cxx'] == 'icpc-phi'
             or args['cxx'] == 'clang++' or args['cxx'] == 'clang++-simd'
-            or args['cxx'] == 'clang++-apple'):
+            or args['cxx'] == 'clang++-apple' or args['cxx'] == 'aocc'):
         makefile_options['LIBRARY_FLAGS'] += ' -lhdf5'
-    if args['cxx'] == 'bgxlc++':
-        makefile_options['PREPROCESSOR_FLAGS'] += (
-            ' -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_BSD_SOURCE'
-            ' -I/soft/libraries/hdf5/1.10.0/cnk-xl/current/include'
-            ' -I/bgsys/drivers/ppcfloor/comm/include')
-        makefile_options['LINKER_FLAGS'] += (
-            ' -L/soft/libraries/hdf5/1.10.0/cnk-xl/current/lib'
-            ' -L/soft/libraries/alcf/current/xl/ZLIB/lib')
-        makefile_options['LIBRARY_FLAGS'] += ' -lhdf5 -lz -lm'
 else:
     definitions['HDF5_OPTION'] = 'NO_HDF5OUTPUT'
 
@@ -839,30 +1012,62 @@ if args['grav'] == 'fft':
 elif args['grav'] == 'mg':
     self_grav_string = 'Multigrid'
 
-print('Your Athena++ distribution has now been configured with the following options:')
-print('  Problem generator:          ' + args['prob'])
-print('  Coordinate system:          ' + args['coord'])
-print('  Equation of state:          ' + args['eos'])
-print('  Riemann solver:             ' + args['flux'])
-print('  Magnetic fields:            ' + ('ON' if args['b'] else 'OFF'))
-print('  Number of scalars:          ' + args['nscalars'])
-print('  Special relativity:         ' + ('ON' if args['s'] else 'OFF'))
-print('  General relativity:         ' + ('ON' if args['g'] else 'OFF'))
-print('  Frame transformations:      ' + ('ON' if args['t'] else 'OFF'))
-print('  Self-Gravity:               ' + self_grav_string)
-print('  Super-Time-Stepping:        ' + ('ON' if args['sts'] else 'OFF'))
-print('  Debug flags:                ' + ('ON' if args['debug'] else 'OFF'))
-print('  Code coverage flags:        ' + ('ON' if args['coverage'] else 'OFF'))
-print('  Linker flags:               ' + makefile_options['LINKER_FLAGS'] + ' '
-      + makefile_options['LIBRARY_FLAGS'])
-print('  Floating-point precision:   ' + ('single' if args['float'] else 'double'))
-print('  Number of ghost cells:      ' + args['nghost'])
-print('  MPI parallelism:            ' + ('ON' if args['mpi'] else 'OFF'))
-print('  OpenMP parallelism:         ' + ('ON' if args['omp'] else 'OFF'))
-print('  FFT:                        ' + ('ON' if args['fft'] else 'OFF'))
-print('  HDF5 output:                ' + ('ON' if args['hdf5'] else 'OFF'))
+
+def output_config(opt_descr, opt_choice, filehandle=None):
+    first_col_width = 32
+    first_col_indent = 2
+    descr_len = len(opt_descr)
+    right_pad_len = first_col_width - (descr_len + first_col_indent + 2)  # include colon
+    right_pad = right_pad_len*' ' if right_pad_len >= 0 else ''
+    line_str = first_col_indent*' ' + opt_descr + ': ' + right_pad + opt_choice
+    print(line_str)
+    if (filehandle is not None):
+        filehandle.write(line_str + '\n')
+
+
+# write the configuration optitions into a log file
+flog = open('./configure.log', 'w')
+
+output_config('Your Athena++ distribution has now been configured with the following options', '', flog)  # noqa
+output_config('Problem generator', args['prob'], flog)
+output_config('Coordinate system', args['coord'], flog)
+output_config('Equation of state', args['eos'], flog)
+output_config('Riemann solver', args['flux'], flog)
+output_config('Magnetic fields', ('ON' if args['b'] else 'OFF'), flog)
+output_config('Number of scalars', definitions['NUMBER_PASSIVE_SCALARS'], flog)
+output_config('Number of chemical species', definitions['NUMBER_CHEMICAL_SPECIES'], flog)
+output_config('Special relativity', ('ON' if args['s'] else 'OFF'), flog)
+output_config('General relativity', ('ON' if args['g'] else 'OFF'), flog)
+output_config('Radiative Transfer', ('ON' if args['nr_radiation'] else 'OFF'), flog)
+output_config('Implicit Radiation', ('ON' if args['implicit_radiation'] else 'OFF'), flog)
+output_config('Cosmic Ray Transport', ('ON' if args['cr'] else 'OFF'), flog)
+output_config('Cosmic Ray Diffusion', ('ON' if args['crdiff'] else 'OFF'), flog)
+output_config('Frame transformations', ('ON' if args['t'] else 'OFF'), flog)
+output_config('Self-Gravity', self_grav_string, flog)
+output_config('Super-Time-Stepping', ('ON' if args['sts'] else 'OFF'), flog)
+output_config('Chemistry', (args['chemistry']
+                            if args['chemistry'] is not None else 'OFF'), flog)
+output_config('KIDA rates', (args['kida_rates']
+                             if args['kida_rates'] is not None else 'OFF'), flog)
+output_config('ChemRadiation', (args['chem_radiation']
+                                if args['chem_radiation'] is not None else 'OFF'), flog)
+output_config('chem_ode_solver', (args['chem_ode_solver'] if args['chem_ode_solver']
+                                  is not None else 'OFF'), flog)
+output_config('Debug flags', ('ON' if args['debug'] else 'OFF'), flog)
+output_config('Code coverage flags', ('ON' if args['coverage'] else 'OFF'), flog)
+output_config('Linker flags', makefile_options['LINKER_FLAGS'] + ' '
+              + makefile_options['LIBRARY_FLAGS'], flog)
+output_config('Floating-point precision', ('single' if args['float'] else 'double'), flog)
+output_config('Number of ghost cells', args['nghost'], flog)
+output_config('MPI parallelism', ('ON' if args['mpi'] else 'OFF'), flog)
+output_config('OpenMP parallelism', ('ON' if args['omp'] else 'OFF'), flog)
+output_config('FFT', ('ON' if args['fft'] else 'OFF'), flog)
+output_config('HDF5 output', ('ON' if args['hdf5'] else 'OFF'), flog)
 if args['hdf5']:
-    print('  HDF5 precision:             ' + ('double' if args['h5double'] else 'single'))
-print('  Compiler:                   ' + args['cxx'])
-print('  Compilation command:        ' + makefile_options['COMPILER_COMMAND'] + ' '
-      + makefile_options['PREPROCESSOR_FLAGS'] + ' ' + makefile_options['COMPILER_FLAGS'])
+    output_config('HDF5 precision', ('double' if args['h5double'] else 'single'), flog)
+output_config('Compiler', args['cxx'], flog)
+output_config('Compilation command', makefile_options['COMPILER_COMMAND'] + ' '
+              + makefile_options['PREPROCESSOR_FLAGS'] + ' '
+              + makefile_options['COMPILER_FLAGS'], flog)
+
+flog.close()

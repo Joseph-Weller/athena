@@ -89,15 +89,25 @@
 // Athena++ headers
 #include "../athena.hpp"
 #include "../athena_arrays.hpp"
+#include "../chem_rad/chem_rad.hpp"
+#include "../chem_rad/integrators/rad_integrators.hpp"
 #include "../coordinates/coordinates.hpp"
+#include "../cr/cr.hpp"
+#include "../crdiffusion/crdiffusion.hpp"
 #include "../field/field.hpp"
 #include "../gravity/gravity.hpp"
 #include "../hydro/hydro.hpp"
 #include "../mesh/mesh.hpp"
+#include "../nr_radiation/radiation.hpp"
 #include "../orbital_advection/orbital_advection.hpp"
 #include "../parameter_input.hpp"
 #include "../scalars/scalars.hpp"
 #include "outputs.hpp"
+
+#ifdef HDF5OUTPUT
+// External library headers
+#include <hdf5.h>  // H5[F|P|S|T]_*, H5[A|D|F|P|S|T]*(), hid_t
+#endif
 
 //----------------------------------------------------------------------------------------
 //! OutputType constructor
@@ -109,6 +119,66 @@ OutputType::OutputType(OutputParameters oparams) :
     // nested doubly linked list of OutputData:
     pfirst_data_(),  // Initialize head node to nullptr
     plast_data_() { // Initialize tail node to nullptr
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn bool vmin_vmax_check(const OutputParameters &op) {
+//! \brief helper function to check vmin and vmax values in OutputParameters
+
+inline bool vmin_vmax_check(OutputParameters &op, ParameterInput *pin) {
+  std::stringstream msg;
+  op.vmin = pin->GetReal(op.block_name, "vmin");
+  op.vmax = pin->GetReal(op.block_name, "vmax");
+  if (!std::isfinite(op.vmin)) {
+    msg << "### FATAL ERROR in Outputs constructor" << std::endl
+        << "vmin is not a finite number in output block '" << op.block_name << "'"
+        << std::endl;
+    ATHENA_ERROR(msg);
+  }
+  if (!std::isfinite(op.vmax)) {
+    msg << "### FATAL ERROR in Outputs constructor" << std::endl
+        << "vmax is not a finite number in output block '" << op.block_name << "'"
+        << std::endl;
+    ATHENA_ERROR(msg);
+  }
+  if (op.vmin >= op.vmax) {
+    msg << "### FATAL ERROR in Outputs constructor" << std::endl
+        << "vmin >= vmax in output block '" << op.block_name << "'" << std::endl;
+    ATHENA_ERROR(msg);
+  }
+  return true;
+}
+
+enum base_type {
+  F = 0,  // floating point types
+  U = 1,  // unsigned integer types
+};
+
+inline bool type_string_check(const base_type base_t, const uint bits,
+                              const OutputParameters &op) {
+  std::string check_string;
+  const std::string &type_string = op.data_format;
+  const std::string &block_name = op.block_name;
+  if (base_t == base_type::F) {
+    std::string prefixes[] = {"f", "fp", "float"};
+    for (const auto &prefix : prefixes) {
+      check_string = prefix + std::to_string(bits);
+      if (check_string.compare(type_string) == 0) return true;
+    }
+    if (type_string.compare("half") == 0 && bits == 16) return true;
+    if (type_string.compare("float") == 0 && bits == 32) return true;
+    if (type_string.compare("double") == 0 && bits == 64) return true;
+    if (type_string.compare("quad") == 0 && bits == 128) return true;
+  } else if (base_t == base_type::U) {
+    std::string prefixes[] = {"u", "uint"};
+    for (const auto &prefix : prefixes) {
+      check_string = prefix + std::to_string(bits);
+      if (check_string.compare(type_string) == 0) return true;
+    }
+    if (type_string.compare("uint") == 0 && bits == 32) return true;
+    if (type_string.compare("ulong") == 0 && bits == 64) return true;
+  }
+  return false;
 }
 
 //----------------------------------------------------------------------------------------
@@ -235,7 +305,7 @@ Outputs::Outputs(Mesh *pm, ParameterInput *pin) {
         if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0 ||
             std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0)
           op.cartesian_vector = pin->GetOrAddBoolean(op.block_name, "cartesian_vector",
-                                                   false);
+                                                     false);
         else
           op.cartesian_vector = false;
 
@@ -243,15 +313,17 @@ Outputs::Outputs(Mesh *pm, ParameterInput *pin) {
         if (op.file_type.compare("hst") != 0 && op.file_type.compare("rst") != 0) {
           op.variable = pin->GetString(op.block_name, "variable");
         }
-        op.data_format = pin->GetOrAddString(op.block_name, "data_format", "%12.5e");
-        op.data_format.insert(0, " "); // prepend with blank to separate columns
 
         // Construct new OutputType according to file format
         // NEW_OUTPUT_TYPES: Add block to construct new types here
         if (op.file_type.compare("hst") == 0) {
+          op.data_format = pin->GetOrAddString(op.block_name, "data_format", "%12.5e");
+          op.data_format.insert(0, " "); // prepend with blank to separate columns
           pnew_type = new HistoryOutput(op);
           num_hst_outputs++;
         } else if (op.file_type.compare("tab") == 0) {
+          op.data_format = pin->GetOrAddString(op.block_name, "data_format", "%12.5e");
+          op.data_format.insert(0, " "); // prepend with blank to separate columns
           pnew_type = new FormattedTableOutput(op);
         } else if (op.file_type.compare("vtk") == 0) {
           pnew_type = new VTKOutput(op);
@@ -261,7 +333,72 @@ Outputs::Outputs(Mesh *pm, ParameterInput *pin) {
         } else if (op.file_type.compare("ath5") == 0
                    || op.file_type.compare("hdf5") == 0) {
 #ifdef HDF5OUTPUT
-          pnew_type = new ATHDF5Output(op);
+          // HDF5 file format requested
+          //
+          // Check if data format is specified, and if not fall back to default
+          if (pin->DoesParameterExist(op.block_name, "data_format")) {
+            op.data_format = pin->GetString(op.block_name, "data_format");
+          } else {
+            op.data_format.clear(); // empty string means use default
+          }
+          // Check if we want to include the mesh data in the output
+          op.include_mesh_data = pin->GetOrAddBoolean(op.block_name, "mesh_data", true);
+          if (op.data_format.empty()) {
+            std::cout << "No data_format specified in output block '"
+                      << op.block_name << "', using default" << std::endl;
+            if (H5_DOUBLE_PRECISION_ENABLED) {
+              pnew_type = new ATHDF5Output<double>(op);
+            } else {
+              pnew_type = new ATHDF5Output<float>(op);
+            }
+          // Check float options
+          } else if (type_string_check(base_type::F, 16, op)) {
+#ifdef fp16_t
+            if (H5T_NATIVE_FLOAT16 == H5I_INVALID_HID) {
+              msg << "### FATAL ERROR in Outputs constructor" << std::endl
+                  << "HDF5 is not configured for requested fp16 support in "
+                  << "output block '" << op.block_name << "'" << std::endl;
+              ATHENA_ERROR(msg);
+            }
+            std::cout << "Using fp16 data format for HDF5 output in block '"
+                      << op.block_name << "'" << std::endl;
+            pnew_type = new ATHDF5Output<fp16_t>(op);
+#else
+            msg << "### FATAL ERROR in Outputs constructor" << std::endl
+                << "Compiler/hardware does not support half precision floating point"
+                << " in output block '" << op.block_name << "'" << std::endl;
+            ATHENA_ERROR(msg);
+#endif
+          } else if (type_string_check(base_type::F, 32, op)) {
+            std::cout << "Using float data format for HDF5 output in block '"
+                      << op.block_name << "'" << std::endl;
+            pnew_type = new ATHDF5Output<float>(op);
+          } else if (type_string_check(base_type::F, 64, op)) {
+            std::cout << "Using double data format for HDF5 output in block '"
+                      << op.block_name << "'" << std::endl;
+            pnew_type = new ATHDF5Output<double>(op);
+          } else if (type_string_check(base_type::F, 128, op)) {
+            pnew_type = new ATHDF5Output<long double>(op);
+          // Check integer options
+          // vmin/vmax must be specified for these to convert to integers
+          } else if (type_string_check(base_type::U, 8, op)) {
+            vmin_vmax_check(op, pin); // can throw errors
+            pnew_type = new ATHDF5Output<std::uint8_t>(op);
+          } else if (type_string_check(base_type::U, 16, op)) {
+            vmin_vmax_check(op, pin); // can throw errors
+            pnew_type = new ATHDF5Output<std::uint16_t>(op);
+          } else if (type_string_check(base_type::U, 32, op)) {
+            vmin_vmax_check(op, pin); // can throw errors
+            pnew_type = new ATHDF5Output<std::uint32_t>(op);
+          } else if (type_string_check(base_type::U, 64, op)) {
+            vmin_vmax_check(op, pin); // can throw errors
+            pnew_type = new ATHDF5Output<std::uint64_t>(op);
+          } else {
+            if (Globals::my_rank == 0) {
+              std::cout << "Ignoring unknown data_format '" << op.data_format
+                        << "' in output block '" << op.block_name << "'" << std::endl;
+            }
+          }
 #else
           msg << "### FATAL ERROR in Outputs constructor" << std::endl
               << "Executable not configured for HDF5 outputs, but HDF5 file format "
@@ -346,7 +483,11 @@ Outputs::~Outputs() {
 void OutputType::LoadOutputData(MeshBlock *pmb) {
   Hydro *phyd = pmb->phydro;
   Field *pfld = pmb->pfield;
+  NRRadiation *prad=pmb->pnrrad;
+  CosmicRay *pcr=pmb->pcr;
+  CRDiffusion *pcrdiff=pmb->pcrdiff;
   PassiveScalars *psclr = pmb->pscalars;
+  ChemRadiation *pchemrad = pmb->pchemrad;
   Gravity *pgrav = pmb->pgrav;
   OrbitalAdvection *porb = pmb->porb;
   num_vars_ = 0;
@@ -383,8 +524,8 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
       pod = new OutputData;
       pod->type = "SCALARS";
       pod->name = "Etot";
-      if(porb->orbital_advection_defined
-         && !output_params.orbital_system_output) {
+      if (porb->orbital_advection_defined
+          && !output_params.orbital_system_output) {
         porb->ConvertOrbitalSystem(phyd->w, phyd->u, OrbitalTransform::cons);
         pod->data.InitWithShallowSlice(porb->u_orb, 4, IEN, 1);
       } else {
@@ -424,8 +565,8 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
     pod = new OutputData;
     pod->type = "VECTORS";
     pod->name = "mom";
-    if(porb->orbital_advection_defined
-       && !output_params.orbital_system_output) {
+    if (porb->orbital_advection_defined
+        && !output_params.orbital_system_output) {
       porb->ConvertOrbitalSystem(phyd->w, phyd->u, OrbitalTransform::cons);
       pod->data.InitWithShallowSlice(porb->u_orb, 4, IM1, 3);
     } else {
@@ -435,8 +576,8 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
     num_vars_ += 3;
     if (output_params.cartesian_vector) {
       AthenaArray<Real> src;
-      if(porb->orbital_advection_defined
-         && !output_params.orbital_system_output) {
+      if (porb->orbital_advection_defined
+          && !output_params.orbital_system_output) {
         src.InitWithShallowSlice(porb->u_orb, 4, IM1, 3);
       } else {
         src.InitWithShallowSlice(phyd->u, 4, IM1, 3);
@@ -465,9 +606,9 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "mom2";
-    if(porb->orbital_advection_defined
-       && !output_params.orbital_system_output
-       && porb->orbital_direction == 1) {
+    if (porb->orbital_advection_defined
+        && !output_params.orbital_system_output
+        && porb->orbital_direction == 1) {
       porb->ConvertOrbitalSystem(phyd->w, phyd->u, OrbitalTransform::cons);
       pod->data.InitWithShallowSlice(porb->u_orb, 4, IM2, 1);
     } else {
@@ -480,9 +621,9 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "mom3";
-    if(porb->orbital_advection_defined
-       && !output_params.orbital_system_output
-       && porb->orbital_direction == 2) {
+    if (porb->orbital_advection_defined
+        && !output_params.orbital_system_output
+        && porb->orbital_direction == 2) {
       porb->ConvertOrbitalSystem(phyd->w, phyd->u, OrbitalTransform::cons);
       pod->data.InitWithShallowSlice(porb->u_orb, 4, IM3, 1);
     } else {
@@ -498,8 +639,8 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
     pod = new OutputData;
     pod->type = "VECTORS";
     pod->name = "vel";
-    if(porb->orbital_advection_defined
-       && !output_params.orbital_system_output) {
+    if (porb->orbital_advection_defined
+        && !output_params.orbital_system_output) {
       porb->ConvertOrbitalSystem(phyd->w, phyd->u, OrbitalTransform::prim);
       pod->data.InitWithShallowSlice(porb->w_orb, 4, IVX, 3);
     } else {
@@ -509,8 +650,8 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
     num_vars_ += 3;
     if (output_params.cartesian_vector) {
       AthenaArray<Real> src;
-      if(porb->orbital_advection_defined
-         && !output_params.orbital_system_output) {
+      if (porb->orbital_advection_defined
+          && !output_params.orbital_system_output) {
         src.InitWithShallowSlice(porb->w_orb, 4, IVX, 3);
       } else {
         src.InitWithShallowSlice(phyd->w, 4, IVX, 3);
@@ -541,9 +682,9 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "vel2";
-    if(porb->orbital_advection_defined
-       && !output_params.orbital_system_output
-       && porb->orbital_direction == 1) {
+    if (porb->orbital_advection_defined
+        && !output_params.orbital_system_output
+        && porb->orbital_direction == 1) {
       porb->ConvertOrbitalSystem(phyd->w, phyd->u, OrbitalTransform::prim);
       pod->data.InitWithShallowSlice(porb->w_orb, 4, IVY, 1);
     } else {
@@ -557,9 +698,9 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
     pod = new OutputData;
     pod->type = "SCALARS";
     pod->name = "vel3";
-    if(porb->orbital_advection_defined
-       && !output_params.orbital_system_output
-       && porb->orbital_direction == 2) {
+    if (porb->orbital_advection_defined
+        && !output_params.orbital_system_output
+        && porb->orbital_direction == 2) {
       porb->ConvertOrbitalSystem(phyd->w, phyd->u, OrbitalTransform::prim);
       pod->data.InitWithShallowSlice(porb->w_orb, 4, IVZ, 1);
     } else {
@@ -594,8 +735,21 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
     std::string root_name_cons = "s";
     std::string root_name_prim = "r";
     for (int n=0; n<NSCALARS; n++) {
-      std::string scalar_name_cons = root_name_cons + std::to_string(n);
-      std::string scalar_name_prim = root_name_prim + std::to_string(n);
+      std::string scalar_name_cons, scalar_name_prim;
+      if (CHEMISTRY_ENABLED) {
+        if (n < NSPECIES) {
+          scalar_name_cons = root_name_cons +
+                             psclr->chemnet.species_names[n];
+          scalar_name_prim = root_name_prim +
+                             psclr->chemnet.species_names[n];
+        } else {
+          scalar_name_cons = root_name_cons + std::to_string(n-NSPECIES);
+          scalar_name_prim = root_name_prim + std::to_string(n-NSPECIES);
+        }
+      } else {
+        scalar_name_cons = root_name_cons + std::to_string(n);
+        scalar_name_prim = root_name_prim + std::to_string(n);
+      }
       if (ContainVariable(output_params.variable, scalar_name_cons) ||
           ContainVariable(output_params.variable, "cons")) {
         pod = new OutputData;
@@ -616,6 +770,556 @@ void OutputType::LoadOutputData(MeshBlock *pmb) {
       }
     }
   }
+
+  if (CHEMRADIATION_ENABLED) {
+    if (ContainVariable(output_params.variable, "rad") ||
+        ContainVariable(output_params.variable, "prim") ||
+        ContainVariable(output_params.variable, "cons")) {
+      std::string name_ir_avg = "ir_avg";
+      for (int i=0; i<pchemrad->nfreq; i++) {
+        std::string vi = name_ir_avg + std::to_string(i);
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = vi;
+        pod->data.InitWithShallowSlice(pchemrad->ir_avg, 4, i, 1);
+        AppendOutputDataNode(pod);
+        num_vars_++;
+      }
+      if (CHEMISTRY_ENABLED) {
+        if (DEBUG) {
+          // for testing six-ray. Not implemented in HDF5 output yet
+          if (std::strcmp(CHEMRADIATION_INTEGRATOR, "six_ray") == 0) {
+            // average column density
+            std::string name_col_avg = "col_avg";
+            for (int i=0; i<pchemrad->pchemradintegrator->ncol; i++) {
+              std::string vi = name_col_avg + std::to_string(i);
+              pod = new OutputData;
+              pod->type = "SCALARS";
+              pod->name = vi;
+              pod->data.InitWithShallowSlice(pchemrad->pchemradintegrator->col_avg,4,i,1);
+              AppendOutputDataNode(pod);
+              num_vars_++;
+            }
+            // column density components
+            pod = new OutputData;
+            pod->type = "VECTORS";
+            pod->name = "col_Htot_p";
+            pod->data.InitWithShallowSlice(pchemrad->pchemradintegrator->col_Htot,4,0,3);
+            AppendOutputDataNode(pod);
+            num_vars_ += 3;
+            pod = new OutputData;
+            pod->type = "VECTORS";
+            pod->name = "col_H2_p";
+            pod->data.InitWithShallowSlice(pchemrad->pchemradintegrator->col_H2,4,0,3);
+            AppendOutputDataNode(pod);
+            num_vars_ += 3;
+            pod = new OutputData;
+            pod->type = "VECTORS";
+            pod->name = "col_CO_p";
+            pod->data.InitWithShallowSlice(pchemrad->pchemradintegrator->col_CO,4,0,3);
+            AppendOutputDataNode(pod);
+            num_vars_ += 3;
+            pod = new OutputData;
+            pod->type = "VECTORS";
+            pod->name = "col_C_p";
+            pod->data.InitWithShallowSlice(pchemrad->pchemradintegrator->col_C,4,0,3);
+            AppendOutputDataNode(pod);
+            num_vars_ += 3;
+            pod = new OutputData;
+            pod->type = "VECTORS";
+            pod->name = "col_Htot_m";
+            pod->data.InitWithShallowSlice(pchemrad->pchemradintegrator->col_Htot,4,3,3);
+            AppendOutputDataNode(pod);
+            num_vars_ += 3;
+            pod = new OutputData;
+            pod->type = "VECTORS";
+            pod->name = "col_H2_m";
+            pod->data.InitWithShallowSlice(pchemrad->pchemradintegrator->col_H2,4,3,3);
+            AppendOutputDataNode(pod);
+            num_vars_ += 3;
+            pod = new OutputData;
+            pod->type = "VECTORS";
+            pod->name = "col_CO_m";
+            pod->data.InitWithShallowSlice(pchemrad->pchemradintegrator->col_CO,4,3,3);
+            AppendOutputDataNode(pod);
+            num_vars_ += 3;
+            pod = new OutputData;
+            pod->type = "VECTORS";
+            pod->name = "col_C_m";
+            pod->data.InitWithShallowSlice(pchemrad->pchemradintegrator->col_C,4,3,3);
+            AppendOutputDataNode(pod);
+            num_vars_ += 3;
+          }
+        }
+      }
+    }
+  }
+  // The following radiation/cosmic ray/thermal conduction are all
+  // cell centered variable
+  if (NR_RADIATION_ENABLED || IM_RADIATION_ENABLED) {
+    if (prad->nfreq == 1) {
+      // (lab-frame) radiation energy density
+      if (ContainVariable(output_params.variable, "Er") ||
+          ContainVariable(output_params.variable, "prim") ||
+          ContainVariable(output_params.variable, "cons")) {
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = "Er";
+        pod->data.InitWithShallowSlice(prad->rad_mom,4,IER,1);
+        AppendOutputDataNode(pod);
+        num_vars_++;
+      }
+
+      // comoving frame fram radiation flux vector
+      if (ContainVariable(output_params.variable, "Fr") ||
+          ContainVariable(output_params.variable, "prim") ||
+          ContainVariable(output_params.variable, "cons")) {
+        pod = new OutputData;
+        pod->type = "VECTORS";
+        pod->name = "Fr";
+        pod->data.InitWithShallowSlice(prad->rad_mom,4,IFR1,3);
+        AppendOutputDataNode(pod);
+        num_vars_+=3;
+        if (output_params.cartesian_vector) {
+          AthenaArray<Real> src;
+          src.InitWithShallowSlice(prad->rad_mom,4,IFR1,3);
+          pod = new OutputData;
+          pod->type = "VECTORS";
+          pod->name = "Fr_xyz";
+          pod->data.NewAthenaArray(3,prad->rad_mom.GetDim3(),prad->rad_mom.GetDim2(),
+                                   prad->rad_mom.GetDim1());
+          CalculateCartesianVector(src, pod->data, pmb->pcoord);
+          AppendOutputDataNode(pod);
+          num_vars_+=3;
+        }
+      }
+
+
+      // each component of radiation flux
+      if (ContainVariable(output_params.variable, "Frx") ||
+          ContainVariable(output_params.variable, "Fr1")) {
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = "Fr1";
+        pod->data.InitWithShallowSlice(prad->rad_mom,4,IFR1,1);
+        AppendOutputDataNode(pod);
+        num_vars_++;
+      }
+
+      if (ContainVariable(output_params.variable, "Fry") ||
+          ContainVariable(output_params.variable, "Fr2")) {
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = "Fr2";
+        pod->data.InitWithShallowSlice(prad->rad_mom,4,IFR2,1);
+        AppendOutputDataNode(pod);
+        num_vars_++;
+      }
+
+      if (ContainVariable(output_params.variable, "Frz") ||
+          ContainVariable(output_params.variable, "Fr3")) {
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = "Fr3";
+        pod->data.InitWithShallowSlice(prad->rad_mom,4,IFR3,1);
+        AppendOutputDataNode(pod);
+        num_vars_++;
+      }
+
+      // lab frame radiation pressure
+      if (ContainVariable(output_params.variable, "Pr") ||
+          ContainVariable(output_params.variable, "prim") ||
+          ContainVariable(output_params.variable, "cons")) {
+        pod = new OutputData;
+        pod->type = "TENSORS";
+        pod->name = "Pr";
+        pod->data.InitWithShallowSlice(prad->rad_mom,4,IPR11,9);
+        AppendOutputDataNode(pod);
+        num_vars_ += 9;
+      }
+
+
+
+      // (comoving-frame) radiation energy density
+      if (ContainVariable(output_params.variable, "Er0") ||
+          ContainVariable(output_params.variable, "prim") ||
+          ContainVariable(output_params.variable, "cons")) {
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = "Er0";
+        pod->data.InitWithShallowSlice(prad->rad_mom_cm,4,IER,1);
+        AppendOutputDataNode(pod);
+        num_vars_++;
+      }
+
+
+
+      // comoving frame fram radiation flux vector
+      if (ContainVariable(output_params.variable, "Fr0") ||
+          ContainVariable(output_params.variable, "prim") ||
+          ContainVariable(output_params.variable, "cons")) {
+        pod = new OutputData;
+        pod->type = "VECTORS";
+        pod->name = "Fr0";
+        pod->data.InitWithShallowSlice(prad->rad_mom_cm,4,IFR1,3);
+        AppendOutputDataNode(pod);
+        num_vars_+=3;
+        if (output_params.cartesian_vector) {
+          AthenaArray<Real> src;
+          src.InitWithShallowSlice(prad->rad_mom_cm,4,IFR1,3);
+          pod = new OutputData;
+          pod->type = "VECTORS";
+          pod->name = "Fr0_xyz";
+          pod->data.NewAthenaArray(3, prad->rad_mom_cm.GetDim3(),
+                                   prad->rad_mom_cm.GetDim2(),
+                                   prad->rad_mom_cm.GetDim1());
+          CalculateCartesianVector(src, pod->data, pmb->pcoord);
+          AppendOutputDataNode(pod);
+          num_vars_+=3;
+        }
+      }
+
+      if (ContainVariable(output_params.variable, "Fr0x") ||
+          ContainVariable(output_params.variable, "Fr01")) {
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = "Fr01";
+        pod->data.InitWithShallowSlice(prad->rad_mom_cm,4,IFR1,1);
+        AppendOutputDataNode(pod);
+        num_vars_++;
+      }
+
+      if (ContainVariable(output_params.variable, "Fr0y") ||
+          ContainVariable(output_params.variable, "Fr02")) {
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = "Fr02";
+        pod->data.InitWithShallowSlice(prad->rad_mom_cm,4,IFR2,1);
+        AppendOutputDataNode(pod);
+        num_vars_++;
+      }
+
+      if (ContainVariable(output_params.variable, "Fr0z") ||
+          ContainVariable(output_params.variable, "Fr03")) {
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = "Fr03";
+        pod->data.InitWithShallowSlice(prad->rad_mom_cm,4,IFR3,1);
+        AppendOutputDataNode(pod);
+        num_vars_++;
+      }
+    } else {
+      //--------/--------/--------/--------/--------/--------/--------
+      for(int ifr=0; ifr<prad->nfreq; ++ifr) {
+        std::string er_ifr = "Er_" + std::to_string(ifr);
+        std::string fr_ifr = "Fr_" + std::to_string(ifr)+"_";
+        std::string frxyz_ifr = "Frxyz_" + std::to_string(ifr)+"_";
+        std::string frx_ifr = "Frx_" + std::to_string(ifr)+"_";
+        std::string fry_ifr = "Fry_" + std::to_string(ifr)+"_";
+        std::string frz_ifr = "Frz_" + std::to_string(ifr)+"_";
+        std::string pr_ifr = "Pr_" + std::to_string(ifr)+"_";
+        std::string er0_ifr = "Er0_" + std::to_string(ifr);
+        std::string fr0_ifr = "Fr0_" + std::to_string(ifr)+"_";
+        std::string fr0xyz_ifr = "Fr0xyz_" + std::to_string(ifr)+"_";
+        std::string fr0x_ifr = "Fr0x_" + std::to_string(ifr)+"_";
+        std::string fr0y_ifr = "Fr0y_" + std::to_string(ifr)+"_";
+        std::string fr0z_ifr = "Fr0z_" + std::to_string(ifr)+"_";
+
+
+        if (ContainVariable(output_params.variable, er_ifr) ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = er_ifr;
+          pod->data.InitWithShallowSlice(prad->rad_mom_nu,4,ifr*13+IER,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        // comoving frame fram radiation flux vector
+        if (ContainVariable(output_params.variable, fr_ifr) ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "VECTORS";
+          pod->name = fr_ifr;
+          pod->data.InitWithShallowSlice(prad->rad_mom_nu,4,ifr*13+IFR1,3);
+          AppendOutputDataNode(pod);
+          num_vars_+=3;
+          if (output_params.cartesian_vector) {
+            AthenaArray<Real> src;
+            src.InitWithShallowSlice(prad->rad_mom_nu,4,ifr*13+IFR1,3);
+            pod = new OutputData;
+            pod->type = "VECTORS";
+            pod->name = frxyz_ifr;
+            pod->data.NewAthenaArray(3, prad->rad_mom_nu.GetDim3(),
+                                     prad->rad_mom_nu.GetDim2(),
+                                     prad->rad_mom_nu.GetDim1());
+            CalculateCartesianVector(src, pod->data, pmb->pcoord);
+            AppendOutputDataNode(pod);
+            num_vars_+=3;
+          }
+        }
+
+
+        if (ContainVariable(output_params.variable, frx_ifr)) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = frx_ifr;
+          pod->data.InitWithShallowSlice(prad->rad_mom_nu,4,ifr*13+IFR1,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, fry_ifr)) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = fry_ifr;
+          pod->data.InitWithShallowSlice(prad->rad_mom_nu,4,ifr*13+IFR2,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, frz_ifr)) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = frz_ifr;
+          pod->data.InitWithShallowSlice(prad->rad_mom_nu,4,ifr*13+IFR3,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, pr_ifr) ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "TENSORS";
+          pod->name = pr_ifr;
+          pod->data.InitWithShallowSlice(prad->rad_mom_nu,4,ifr*13+IPR11,9);
+          AppendOutputDataNode(pod);
+          num_vars_+=9;
+        }
+
+        if (ContainVariable(output_params.variable, er0_ifr) ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = er0_ifr;
+          pod->data.InitWithShallowSlice(prad->rad_mom_cm_nu,4,ifr*4+IER,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, fr0_ifr) ||
+            ContainVariable(output_params.variable, "prim") ||
+            ContainVariable(output_params.variable, "cons")) {
+          pod = new OutputData;
+          pod->type = "VECTORS";
+          pod->name = fr0_ifr;
+          pod->data.InitWithShallowSlice(prad->rad_mom_cm_nu,4,ifr*4+IFR1,3);
+          AppendOutputDataNode(pod);
+          num_vars_+=3;
+          if (output_params.cartesian_vector) {
+            AthenaArray<Real> src;
+            src.InitWithShallowSlice(prad->rad_mom_cm_nu,4,ifr*4+IFR1,3);
+            pod = new OutputData;
+            pod->type = "VECTORS";
+            pod->name = fr0xyz_ifr;
+            pod->data.NewAthenaArray(3, prad->rad_mom_cm_nu.GetDim3(),
+                                     prad->rad_mom_cm_nu.GetDim2(),
+                                     prad->rad_mom_cm_nu.GetDim1());
+            CalculateCartesianVector(src, pod->data, pmb->pcoord);
+            AppendOutputDataNode(pod);
+            num_vars_+=3;
+          }
+        }
+
+
+        if (ContainVariable(output_params.variable, fr0x_ifr)) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = fr0x_ifr;
+          pod->data.InitWithShallowSlice(prad->rad_mom_cm_nu,4,ifr*4+IFR1,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, fr0y_ifr)) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = fr0y_ifr;
+          pod->data.InitWithShallowSlice(prad->rad_mom_cm_nu,4,ifr*4+IFR2,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+
+        if (ContainVariable(output_params.variable, fr0z_ifr)) {
+          pod = new OutputData;
+          pod->type = "SCALARS";
+          pod->name = fr0z_ifr;
+          pod->data.InitWithShallowSlice(prad->rad_mom_cm_nu,4,ifr*4+IFR3,1);
+          AppendOutputDataNode(pod);
+          num_vars_++;
+        }
+      }
+    }
+    //-------------------------------------------------------
+    for (int ifr=0; ifr<prad->nfreq; ++ifr) {
+      std::string sigmaa_ifr = "Sigma_a_" + std::to_string(ifr);
+      std::string sigmas_ifr = "Sigma_s_" + std::to_string(ifr);
+      std::string sigmap_ifr = "Sigma_p_" + std::to_string(ifr);
+      if (ContainVariable(output_params.variable, sigmas_ifr) ||
+          ContainVariable(output_params.variable, "prim") ||
+          ContainVariable(output_params.variable, "cons")) {
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = sigmas_ifr;
+        pod->data.InitWithShallowSlice(prad->output_sigma,4,3*ifr+OPAS,1);
+        AppendOutputDataNode(pod);
+        num_vars_ += 1;
+      }
+
+      if (ContainVariable(output_params.variable, sigmaa_ifr) ||
+          ContainVariable(output_params.variable, "prim") ||
+          ContainVariable(output_params.variable, "cons")) {
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = sigmaa_ifr;
+        pod->data.InitWithShallowSlice(prad->output_sigma,4,3*ifr+OPAA,1);
+        AppendOutputDataNode(pod);
+        num_vars_ += 1;
+      }
+
+      if (ContainVariable(output_params.variable, sigmap_ifr) ||
+          ContainVariable(output_params.variable, "prim") ||
+          ContainVariable(output_params.variable, "cons")) {
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = sigmap_ifr;
+        pod->data.InitWithShallowSlice(prad->output_sigma,4,3*ifr+OPAP,1);
+        AppendOutputDataNode(pod);
+        num_vars_ += 1;
+      }
+    } // end ifr loop
+  } // End (RADIATION_ENABLED)
+
+  if (CR_ENABLED) {
+    if (ContainVariable(output_params.variable, "Ec") ||
+        ContainVariable(output_params.variable, "prim") ||
+        ContainVariable(output_params.variable, "cons")) {
+      pod = new OutputData;
+      pod->type = "SCALARS";
+      pod->name = "Ec";
+      pod->data.InitWithShallowSlice(pcr->u_cr,4,CRE,1);
+      AppendOutputDataNode(pod);
+      num_vars_++;
+    }
+
+    // comoving frame fram radiation flux vector
+    if (ContainVariable(output_params.variable, "Fc") ||
+        ContainVariable(output_params.variable, "prim") ||
+        ContainVariable(output_params.variable, "cons")) {
+      pod = new OutputData;
+      pod->type = "VECTORS";
+      pod->name = "Fc";
+      pod->data.InitWithShallowSlice(pcr->u_cr,4,CRF1,3);
+      AppendOutputDataNode(pod);
+      num_vars_+=3;
+      if (output_params.cartesian_vector) {
+        AthenaArray<Real> src;
+        src.InitWithShallowSlice(pcr->u_cr,4,CRF1,3);
+        pod = new OutputData;
+        pod->type = "VECTORS";
+        pod->name = "Fr_xyz";
+        pod->data.NewAthenaArray(3,pcr->u_cr.GetDim3(),pcr->u_cr.GetDim2(),
+                                 pcr->u_cr.GetDim1());
+        CalculateCartesianVector(src, pod->data, pmb->pcoord);
+        AppendOutputDataNode(pod);
+        num_vars_+=3;
+      }
+    }
+
+    if (ContainVariable(output_params.variable, "Sigma_diff") ||
+        ContainVariable(output_params.variable, "prim") ||
+        ContainVariable(output_params.variable, "cons")) {
+      pod = new OutputData;
+      pod->type = "VECTORS";
+      pod->name = "Sigma_diff";
+      pod->data.InitWithShallowSlice(pcr->sigma_diff,4,0,3);
+      AppendOutputDataNode(pod);
+      num_vars_+=3;
+    }
+
+    if (ContainVariable(output_params.variable, "Sigma_adv") ||
+        ContainVariable(output_params.variable, "prim") ||
+        ContainVariable(output_params.variable, "cons")) {
+      pod = new OutputData;
+      pod->type = "VECTORS";
+      pod->name = "Sigma_adv";
+      pod->data.InitWithShallowSlice(pcr->sigma_adv,4,0,3);
+      AppendOutputDataNode(pod);
+      num_vars_+=3;
+    }
+
+    // The streaming velocity
+    if (ContainVariable(output_params.variable, "Vc") ||
+        ContainVariable(output_params.variable, "prim") ||
+        ContainVariable(output_params.variable, "cons")) {
+      pod = new OutputData;
+      pod->type = "VECTORS";
+      pod->name = "Vc";
+      pod->data.InitWithShallowSlice(pcr->v_adv,4,0,3);
+      AppendOutputDataNode(pod);
+      num_vars_+=3;
+      if (output_params.cartesian_vector) {
+        AthenaArray<Real> src;
+        src.InitWithShallowSlice(pcr->v_adv,4,0,3);
+        pod = new OutputData;
+        pod->type = "VECTORS";
+        pod->name = "Vc_xyz";
+        pod->data.NewAthenaArray(3,pcr->v_adv.GetDim3(),
+                                 pcr->v_adv.GetDim2(),
+                                 pcr->v_adv.GetDim1());
+        CalculateCartesianVector(src, pod->data, pmb->pcoord);
+        AppendOutputDataNode(pod);
+        num_vars_+=3;
+      }
+    }
+  }// end Cosmic Rays
+
+  if (CRDIFFUSION_ENABLED) {
+    if (ContainVariable(output_params.variable, "ecr") ||
+        ContainVariable(output_params.variable, "prim") ||
+        ContainVariable(output_params.variable, "cons")) {
+      pod = new OutputData;
+      pod->type = "SCALARS";
+      pod->name = "ecr";
+      pod->data.InitWithShallowSlice(pcrdiff->ecr,4,0,1);
+      AppendOutputDataNode(pod);
+      num_vars_++;
+      if (pcrdiff->output_defect) {
+        pod = new OutputData;
+        pod->type = "SCALARS";
+        pod->name = "defect-ecr";
+        pod->data.InitWithShallowSlice(pcrdiff->def, 4, 0, 1);
+        AppendOutputDataNode(pod);
+        num_vars_++;
+      }
+    }
+    if (ContainVariable(output_params.variable, "zeta") ||
+        ContainVariable(output_params.variable, "prim") ||
+        ContainVariable(output_params.variable, "cons")) {
+      pod = new OutputData;
+      pod->type = "SCALARS";
+      pod->name = "zeta";
+      pod->data.InitWithShallowSlice(pcrdiff->zeta,4,0,1);
+      AppendOutputDataNode(pod);
+      num_vars_++;
+    }
+  }
+
   // note, the Bcc variables are stored in a separate HDF5 dataset from the above Output
   // nodes, and it must come after those nodes in the linked list
   if (MAGNETIC_FIELDS_ENABLED) {
@@ -799,14 +1503,26 @@ void Outputs::MakeOutputs(Mesh *pm, ParameterInput *pin, bool wtflag) {
   // wtflag = only true for making final outputs due to signal or wall-time/cycle/time
   // limit. Used by restart file output to change suffix to .final
   bool first=true;
+  MeshBlock *pmb;
+  bool rad_mom=true;
   OutputType* ptype = pfirst_type_;
   while (ptype != nullptr) {
     if (((pm->time == pm->start_time) // output initial conditions, unless next_time set
          && (ptype->output_params.next_time <= pm->start_time ))
-      || (ptype->output_params.dt > 0.0 && pm->time >= ptype->output_params.next_time)
-      || (ptype->output_params.dcycle > 0 && pm->ncycle%ptype->output_params.dcycle == 0)
-      || (pm->time >= pm->tlim)
-      || (wtflag && ptype->output_params.file_type == "rst")) {
+        || (ptype->output_params.dt > 0.0 && pm->time >= ptype->output_params.next_time)
+        || (ptype->output_params.dcycle > 0
+            && pm->ncycle%ptype->output_params.dcycle == 0)
+        || (pm->time >= pm->tlim)
+        || (wtflag && ptype->output_params.file_type == "rst")) {
+      if (rad_mom && (NR_RADIATION_ENABLED || IM_RADIATION_ENABLED)) {
+        for(int b=0; b<pm->nblocal; ++b) {
+          pmb = pm->my_blocks(b);
+          // Calculate Com-moving moments and grey opacity for dump
+          pmb->pnrrad->CalculateMoment(pmb->pnrrad->ir);
+          pmb->pnrrad->CalculateComMoment();
+        }
+        rad_mom = false;
+      }
       if (first && ptype->output_params.file_type != "hst") {
         pm->ApplyUserWorkBeforeOutput(pin);
         first = false;
@@ -965,7 +1681,6 @@ bool OutputType::SliceOutputData(MeshBlock *pmb, int dim) {
 void OutputType::SumOutputData(MeshBlock* pmb, int dim) {
   // For each node in OutputData doubly linked list, sum arrays containing output data
   OutputData *pdata = pfirst_data_;
-
   while (pdata != nullptr) {
     OutputData *pnew = new OutputData;
     pnew->type = pdata->type;
@@ -1012,7 +1727,7 @@ void OutputType::SumOutputData(MeshBlock* pmb, int dim) {
     }
 
     ReplaceOutputDataNode(pdata, pnew);
-    pdata = pdata->pnext;
+    pdata = pnew->pnext;
   }
 
   // modify array indices
@@ -1100,7 +1815,7 @@ bool OutputType::ContainVariable(const std::string &haystack, const std::string 
   if (haystack.find(needle + ',') == 0)
     return true;
   if (haystack.find(',' + needle) != std::string::npos
-    && haystack.find(',' + needle) == haystack.length() - needle.length() - 1)
+      && haystack.find(',' + needle) == haystack.length() - needle.length() - 1)
     return true;
   return false;
 }

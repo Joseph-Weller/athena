@@ -385,9 +385,6 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         }
       }
     }
-    rax.DeleteAthenaArray();
-    ray.DeleteAthenaArray();
-    raz.DeleteAthenaArray();
   }
 
   // initialize total energy
@@ -787,7 +784,7 @@ Real HistoryBs(MeshBlock *pmb, int iout) {
       for (int j=0; j<nx2; j++) {
         bs_temp += bb(0,k,j,i);
       }
-      bs += std::fabs(bs_temp);
+      bs += std::abs(bs_temp);
     }
   }
   return bs/(amp*total_volume);

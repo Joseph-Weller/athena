@@ -28,8 +28,7 @@ def main(**kwargs):
     from mpl_toolkits.mplot3d import Axes3D  # noqa
 
     # Read and plot block edges
-    fig = plt.figure()
-    ax = fig.gca(projection='3d')
+    fig, ax = plt.subplots(1, 1, subplot_kw={'projection': '3d'})
     x = []
     y = []
     z = []
@@ -40,7 +39,7 @@ def main(**kwargs):
                 x.append(float(numbers_str[0]))
                 y.append(float(numbers_str[1]))
                 # append zero if 2D
-                if(len(numbers_str) > 2):
+                if (len(numbers_str) > 2):
                     z.append(float(numbers_str[2]))
                 else:
                     z.append(0.0)

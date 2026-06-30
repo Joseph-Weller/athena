@@ -1,6 +1,7 @@
 # Configured outputs
 Makefile
 src/defs.hpp
+configure.log
 
 # Object and binary directories
 obj/
@@ -42,6 +43,9 @@ meshtest.dat
 
 # Mac OS metadata
 .DS_Store
+
+# vscode files
+.vscode/
 
 # editor temp files
 *~

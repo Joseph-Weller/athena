@@ -18,6 +18,17 @@
 #include "athena_arrays.hpp"
 #include "defs.hpp"
 
+// See if we have FP16 support
+#ifndef __INTEL_LLVM_COMPILER
+#if defined(__fp16) || defined(__FLT16_MAX__) || defined(__ARM_FP16_FORMAT_IEEE)
+#define fp16_t __fp16
+#elif defined(_Float16)
+#define fp16_t _Float16
+#endif
+#else
+#define fp16_t_not_supported
+#endif // __INTEL_LLVM_COMPILER
+
 // primitive type alias that allows code to run with either floats or doubles
 #if SINGLE_PRECISION_ENABLED
 using Real = float;
@@ -50,9 +61,11 @@ class Coordinates;
 class ParameterInput;
 class HydroDiffusion;
 class FieldDiffusion;
-struct MGCoordinates;
-
+class MGCoordinates;
 class OrbitalAdvection;
+class NRRadiation;
+class IMRadiation;
+class CosmicRay;
 
 //--------------------------------------------------------------------------------------
 //! \struct LogicalLocation
@@ -75,6 +88,26 @@ struct LogicalLocation { // aggregate and POD type
 
 //! prototype for overloading the comparison operator (defined in meshblock_tree.cpp)
 bool operator==(const LogicalLocation &l1, const LogicalLocation &l2);
+
+
+//! \fn inline std::int64_t rotl(std::int64_t i, int s)
+//  \brief left bit rotation function for 64bit integers (unsafe if s > 64)
+
+inline std::int64_t rotl(std::int64_t i, int s) {
+  return (i << s) | (i >> (64 - s));
+}
+
+
+//! \struct LogicalLocationHash
+//  \brief Hash function object for LogicalLocation
+
+struct LogicalLocationHash {
+ public:
+  std::size_t operator()(const LogicalLocation &l) const {
+    return static_cast<std::size_t>(l.lx1^rotl(l.lx2,21)^rotl(l.lx3,42));
+  }
+};
+
 
 //----------------------------------------------------------------------------------------
 //! \struct RegionSize
@@ -164,12 +197,14 @@ enum CoordinateDirection {X1DIR=0, X2DIR=1, X3DIR=2};
 // KGF: Except for the 2x MG* enums, these may be unnessary w/ the new class inheritance
 // Now, only passed to BoundaryVariable::InitBoundaryData(); could replace w/ bool switch
 // TODO(tomo-ono): consider necessity of orbita_cc and orbital_fc
-enum class BoundaryQuantity {cc, fc, cc_flcor, fc_flcor, mggrav,
-                             mggrav_f, orbital_cc, orbital_fc};
+enum class BoundaryQuantity {cc, fc, cc_flcor, fc_flcor, mg, mg_faceonly, mg_coeff,
+                             orbital_cc, orbital_fc};
 enum class HydroBoundaryQuantity {cons, prim};
-enum class BoundaryCommSubset {mesh_init, gr_amr, all, orbital};
+enum class BoundaryCommSubset {mesh_init, gr_amr, all, orbital, radiation, radhydro};
 // TODO(felker): consider generalizing/renaming to QuantityFormulation
-enum class FluidFormulation {evolve, background, disabled}; // rename background -> fixed?
+// TODO(Gong): currently disabled=background (with passive scalar advection),
+// and fixed is without passive scalar advection.
+enum class FluidFormulation {evolve, background, fixed, disabled};
 enum class TaskType {op_split_before, main_int, op_split_after};
 enum class UserHistoryOperation {sum, max, min};
 
@@ -209,9 +244,31 @@ using FieldDiffusionCoeffFunc = void (*)(
     const AthenaArray<Real> &w,
     const AthenaArray<Real> &bmag,
     int is, int ie, int js, int je, int ks, int ke);
-using MGSourceMaskFunc = void (*)(AthenaArray<Real> &src,
+using MGMaskFunc = void (*)(AthenaArray<Real> &dat,
     int is, int ie, int js, int je, int ks, int ke, const MGCoordinates &coord);
 using OrbitalVelocityFunc = Real (*)(
     OrbitalAdvection *porb, Real x1, Real x2, Real x3);
+using RadBoundaryFunc = void (*)(
+     MeshBlock *pmb, Coordinates *pco, NRRadiation *prad,
+     const AthenaArray<Real> &w, FaceField &b,
+     AthenaArray<Real> &ir,
+     Real time, Real dt, int is, int ie, int js, int je, int ks, int ke, int ngh);
+using OpacityFunc = void (*)(MeshBlock *pmb, AthenaArray<Real> &prim);
+using FrequencyFunc = void (*)(NRRadiation *prad);
+using EmissionFunc = void(*)(NRRadiation *prad, Real tgas);
+using CROpacityFunc = void (*)(MeshBlock *pmb, AthenaArray<Real> &u_cr,
+                      AthenaArray<Real> &prim, AthenaArray<Real> &bcc);
+using CRStreamingFunc = void (*)(MeshBlock *pmb, AthenaArray<Real> &u_cr,
+                      AthenaArray<Real> &prim, AthenaArray<Real> &bcc,
+                      AthenaArray<Real> &grad_pc, int k, int j, int is, int ie);
+using SRJFunc = void (*)(IMRadiation *pimrad);
+
+using CRBoundaryFunc = void (*)(
+     MeshBlock *pmb, Coordinates *pco, CosmicRay *pcr,
+     const AthenaArray<Real> &w, FaceField &b, AthenaArray<Real> &u_cr,
+     Real time, Real dt, int is, int ie, int js, int je, int ks, int ke, int ngh);
+using CRSrcTermFunc = void (*)(
+    MeshBlock *pmb, const Real time, const Real dt,
+    const AthenaArray<Real> &prim, FaceField &b, AthenaArray<Real> &u_cr);
 
 #endif // ATHENA_HPP_
