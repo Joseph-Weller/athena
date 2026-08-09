@@ -90,6 +90,7 @@ Mesh::Mesh(ParameterInput *pin, int mesh_test) :
     start_time(pin->GetOrAddReal("time", "start_time", 0.0)), time(start_time),
     tlim(pin->GetReal("time", "tlim")), dt(std::numeric_limits<Real>::max()),
     dt_hyperbolic(dt), dt_parabolic(dt), dt_user(dt),
+    dt_min(pin->GetOrAddReal("time", "dt_min", 0.0)),
     cfl_number(pin->GetReal("time", "cfl_number")),
     nlim(pin->GetOrAddInteger("time", "nlim", -1)), ncycle(),
     ncycle_out(pin->GetOrAddInteger("time", "ncycle_out", 1)),
@@ -114,6 +115,7 @@ Mesh::Mesh(ParameterInput *pin, int mesh_test) :
     rubberband_dt(pin->GetOrAddReal("problem","rubberband_dt",0.0)),
     rubberband_max(pin->GetOrAddReal("problem","rubberband_max_velocity",0.0)),
     rubberband_next_time(pin->GetOrAddReal("problem","rubberband_init_time",0.0)),
+    Va2_max(pin->GetOrAddReal("problem","Alfven_max_velocity_sqr", 10e20)),
     center_mass_x(0.0),
     center_mass_y(0.0),
     center_mass_z(0.0),
@@ -610,6 +612,7 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
     start_time(pin->GetOrAddReal("time", "start_time", 0.0)), time(start_time),
     tlim(pin->GetReal("time", "tlim")), dt(std::numeric_limits<Real>::max()),
     dt_hyperbolic(dt), dt_parabolic(dt), dt_user(dt),
+    dt_min(pin->GetOrAddReal("time", "dt_min", 0.0)),
     cfl_number(pin->GetReal("time", "cfl_number")),
     nlim(pin->GetOrAddInteger("time", "nlim", -1)), ncycle(),
     ncycle_out(pin->GetOrAddInteger("time", "ncycle_out", 1)),
@@ -632,6 +635,7 @@ Mesh::Mesh(ParameterInput *pin, IOWrapper& resfile, int mesh_test) :
     apply_rubberband(false),
     rubberband_dt(pin->GetOrAddReal("problem","rubberband_dt",0.0)),
     rubberband_max(pin->GetOrAddReal("problem","rubberband_max_velocity",0.0)),
+    Va2_max(pin->GetOrAddReal("problem","Alfven_max_velocity_sqr", 10e20)),
     center_mass_x(0.0),
     center_mass_y(0.0),
     center_mass_z(0.0),
@@ -1193,6 +1197,12 @@ void Mesh::NewTimeStep() {
     if (sts_max_dt_ratio > 0 && dt_ratio > sts_max_dt_ratio) {
       dt = sts_max_dt_ratio * dt_parabolic;
     }
+  }
+
+  //check if dt is less than minimum timestep
+  if (dt < dt_min){
+    std::cout << "minimum timestep reached, aborting run" << std::endl;
+    tlim = time;
   }
 
   return;
