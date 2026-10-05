@@ -78,9 +78,38 @@ void EquationOfState::ConservedToPrimitive(
         Real& w_vz = prim(IVZ,k,j,i);
         Real& w_e  = prim(IEN,k,j,i);
 
+	// modify floors based on distance to orgin
+	//
+	Real x = pco->x1v(i);
+        Real y = pco->x2v(j);
+        Real z = pco->x3v(k);
+
+	Real r = std::sqrt(SQR(x) + SQR(y) + SQR(z));
+	Real den_floor_new = density_floor_;
+	Real espec_floor_new = espec_floor_;
+	Real R_E = 6.371e8;
+
+	//if(r < 5.0*R_E){
+        //  den_floor_new = 10.0*density_floor_;
+	//  espec_floor_new = espec_floor_;
+	//} else {
+	//  den_floor_new = std::max(density_floor_, 10.0*density_floor_ - (9*density_floor_/(35.0*R_E))*(r-5.0*R_E));
+	//  espec_floor_new = std::min(10.0*espec_floor_, espec_floor_ + (9*espec_floor_/(35.0*R_E))*(r-5.0*R_E));
+	//}
+
+	if(r < 5.0*R_E){
+          den_floor_new = 100.0*density_floor_;
+          espec_floor_new = espec_floor_;
+        } else {
+          den_floor_new = std::max(density_floor_, 100.0*density_floor_/(1.0+99.0*SQR((r-5.0*R_E)/(35.0*R_E))));
+          espec_floor_new = std::min(5.0*espec_floor_, espec_floor_ + (4.0*espec_floor_/(35.0*R_E))*(r-5.0*R_E));
+        }
+
+
         // apply density floor, without changing momentum or energy
-        u_d = (u_d > density_floor_) ?  u_d : density_floor_;
-        w_d = u_d;
+        //u_d = (u_d > density_floor_) ?  u_d : density_floor_;
+        u_d = (u_d > den_floor_new) ?  u_d : den_floor_new;
+	w_d = u_d;
 
         Real di = 1.0/u_d;
         w_vx = u_m1*di;
@@ -99,10 +128,12 @@ void EquationOfState::ConservedToPrimitive(
         // apply specific internal energy floor, correct total energy
         //u_e = (w_e > espec_floor_) ? w_e : (w_d*espec_floor_ + ke + pb);
         //attempted fix below
-	u_e = (w_e > espec_floor_) ? u_e : (w_d*espec_floor_ + ke + pb);
+	//u_e = (w_e > espec_floor_) ? u_e : (w_d*espec_floor_ + ke + pb);
+	u_e = (w_e > espec_floor_new) ? u_e : (w_d*espec_floor_new + ke + pb);
 	//u_e = (w_e > espec_floor_) ? w_e : espec_floor_;
 	//attempated fix below
-        w_e = (w_e > espec_floor_) ? w_e : espec_floor_;
+        //w_e = (w_e > espec_floor_) ? w_e : espec_floor_;
+	w_e = (w_e > espec_floor_new) ? w_e : espec_floor_new;
 
 	//apply velocity ceiling
 	Real m_sq = SQR(u_m1) + SQR(u_m2) + SQR(u_m3);
@@ -134,15 +165,20 @@ void EquationOfState::ConservedToPrimitive(
 
           // correct total energy
           u_e += delta_ke;
+	  //is above neccessary? shouldn't change w_e
+	  //u_e = w_d*w_e + ke + pb;
 
           // recalculate specific internal energy
+	  //is below neccessary? shouldn't change we
 	  w_e = di*(u_e - ke - pb);
 
           // reapply specific internal energy floor
-          u_e = (w_e > espec_floor_) ? u_e : (w_d*espec_floor_ + ke + pb);
+          //u_e = (w_e > espec_floor_) ? u_e : (w_d*espec_floor_ + ke + pb);
+	  u_e = (w_e > espec_floor_new) ? u_e : (w_d*espec_floor_new + ke + pb);
           //u_e = (w_e > espec_floor_) ? w_e : espec_floor_;
           //attempated fix below
-          w_e = (w_e > espec_floor_) ? w_e : espec_floor_;
+          //w_e = (w_e > espec_floor_) ? w_e : espec_floor_;
+	  w_e = (w_e > espec_floor_new) ? w_e : espec_floor_new;
         }
 
 	// apply specific internal energy ceiling
@@ -205,6 +241,28 @@ void EquationOfState::PrimitiveToConserved(
         // cellwise conversion
         u_e = w_d*w_e + 0.5*(w_d*(SQR(w_vx) + SQR(w_vy) + SQR(w_vz))
                              + (SQR(bcc1) + SQR(bcc2) + SQR(bcc3)));
+
+	//adding max velocity correction here as well
+
+        //Real v_sq = SQR(w_vx) + SQR(w_vy) + SQR(w_vz);
+        //Real v_abs = (std::sqrt(v_sq) > 0.0) ? std::sqrt(v_sq) : 0.0;
+        //if (v_abs > max_velocity_) {
+        //  Real vm_over_v = max_velocity_ / v_abs;
+
+          // apply velocity ceiling
+          //Real tmp_vx = w_vx * vm_over_v;
+          //Real tmp_vy = w_vy * vm_over_v;
+          //Real tmp_vz = w_vz * vm_over_v;
+
+          // correct momentum/energy
+	  //u_m1 = tmp_vx*w_d;
+          //u_m2 = tmp_vy*w_d;
+          //u_m3 = tmp_vz*w_d;
+          // cellwise conversion
+          //u_e = w_d*w_e + 0.5*(w_d*(SQR(tmp_vx) + SQR(tmp_vy) + SQR(tmp_vz))
+          //                   + (SQR(bcc1) + SQR(bcc2) + SQR(bcc3)));
+
+        //}
       }
     }
   }
@@ -242,15 +300,45 @@ void EquationOfState::ApplyPrimitiveFloors(AthenaArray<Real> &prim, int k, int j
   Real& w_d  = prim(IDN,i);
   Real& w_e  = prim(IEN,i);
 
+  //adding location dependent floors
+
+  Real x = pmy_block_->pcoord->x1v(i);
+  Real y = pmy_block_->pcoord->x2v(j);
+  Real z = pmy_block_->pcoord->x3v(k);
+
+  Real r = std::sqrt(SQR(x) + SQR(y) + SQR(z));
+  Real den_floor_new = density_floor_;
+  Real espec_floor_new = espec_floor_;
+  Real R_E = 6.371e8;
+
+  //if(r < 5.0*R_E){
+  //  den_floor_new = 10.0*density_floor_;
+  //  espec_floor_new = espec_floor_;
+  //} else {
+  //  den_floor_new = std::max(density_floor_, 10.0*density_floor_ - (9*density_floor_/(35.0*R_E))*(r-5.0*R_E));
+  //  espec_floor_new = std::min(10.0*espec_floor_, espec_floor_ + (9*espec_floor_/(35.0*R_E))*(r-5.0*R_E));
+  //}
+
+  if(r < 5.0*R_E){
+    den_floor_new = 100.0*density_floor_;
+    espec_floor_new = espec_floor_;
+  } else {
+    den_floor_new = std::max(density_floor_, 100.0*density_floor_/(1.0+99.0*SQR((r-5.0*R_E)/(35.0*R_E))));
+    espec_floor_new = std::min(5.0*espec_floor_, espec_floor_ + (4.0*espec_floor_/(35.0*R_E))*(r-5.0*R_E));
+  }
+
+
   // added below line to try to correct error
   //Real& w_p  = prim(IPR,i);
 
   // apply density floor
-  w_d = (w_d > density_floor_) ?  w_d : density_floor_;
+  //w_d = (w_d > density_floor_) ?  w_d : density_floor_;
+  w_d = (w_d > den_floor_new) ?  w_d : den_floor_new;
   // apply pressure floor
   //w_p = (w_e > espec_floor_) ?  w_e : espec_floor_;
   //attempted fix below
-  w_e = (w_e > espec_floor_) ?  w_e : espec_floor_;
+  //w_e = (w_e > espec_floor_) ?  w_e : espec_floor_;
+  w_e = (w_e > espec_floor_new) ?  w_e : espec_floor_new;
 
   //
   return;
@@ -274,18 +362,61 @@ void EquationOfState::ApplyPrimitiveConservedFloors(
   const Real& bcc1 = bcc(IB1,k,j,i);
   const Real& bcc2 = bcc(IB2,k,j,i);
   const Real& bcc3 = bcc(IB3,k,j,i);
+  
+  //adjusting density floor based on magnetic energy
+  //Real pb = 0.5*(SQR(bcc1) + SQR(bcc2) + SQR(bcc3));
+  //if (pb > 1.0e4) {
+  //  w_d = (w_d > 10.0*density_floor_) ?  w_d : 10.0*density_floor_;
+  //} else if (pb > 5.0e3) {
+  //  w_d = (w_d > ((9.0/5.0e3)*(pb-5.0e3)+1.0)*density_floor_) ?  w_d : ((9.0/5.0e3)*(pb-5.0e3)+1.0)*density_floor_;
+  //} else{
+  //  w_d = (w_d > density_floor_) ?  w_d : density_floor_;
+  //}
+
+
+  //adding location dependent floors
+
+  Real x = pmy_block_->pcoord->x1v(i);
+  Real y = pmy_block_->pcoord->x2v(j);
+  Real z = pmy_block_->pcoord->x3v(k);
+
+  Real r = std::sqrt(SQR(x) + SQR(y) + SQR(z));
+  Real den_floor_new = density_floor_;
+  Real espec_floor_new = espec_floor_;
+  Real R_E = 6.371e8;
+
+  //if(r < 5.0*R_E){
+  //  den_floor_new = 10.0*density_floor_;
+  //  espec_floor_new = espec_floor_;
+  //} else {
+  //  den_floor_new = std::max(density_floor_, 10.0*density_floor_ - (9*density_floor_/(35.0*R_E))*(r-5.0*R_E));
+  //  espec_floor_new = std::min(10.0*espec_floor_, espec_floor_ + (9*espec_floor_/(35.0*R_E))*(r-5.0*R_E));
+  //}
+
+  if(r < 5.0*R_E){
+    den_floor_new = 100.0*density_floor_;
+    espec_floor_new = espec_floor_;
+  } else {
+    den_floor_new = std::max(density_floor_, 100.0*density_floor_/(1.0+99.0*SQR((r-5.0*R_E)/(35.0*R_E))));
+    espec_floor_new = std::min(5.0*espec_floor_, espec_floor_ + (4.0*espec_floor_/(35.0*R_E))*(r-5.0*R_E));
+  }
+  
   // apply (prim) density floor, without changing momentum or energy
-  w_d = (w_d > density_floor_) ?  w_d : density_floor_;
+
+  //w_d = (w_d > density_floor_) ?  w_d : density_floor_;
+  w_d = (w_d > den_floor_new) ?  w_d : den_floor_new;
   // ensure cons density matches
   u_d = w_d;
 
   Real pb = 0.5*(SQR(bcc1) + SQR(bcc2) + SQR(bcc3));
   Real e_k = 0.5*w_d*(SQR(prim(IVX,k,j,i)) + SQR(prim(IVY,k,j,i)) + SQR(prim(IVZ,k,j,i)));
   // apply pressure floor, correct total energy
-  u_e = (w_e > espec_floor_) ? u_e : w_d*espec_floor_ + e_k + pb;
+  //u_e = (w_e > espec_floor_) ? u_e : w_d*espec_floor_ + e_k + pb;
+  u_e = (w_e > espec_floor_new) ? u_e : w_d*espec_floor_new + e_k + pb;
   //w_p = (w_e > espec_floor_) ? w_e : espec_floor_;
   //attempted fix below
-  w_e = (w_e > espec_floor_) ? w_e : espec_floor_;
+  //w_e = (w_e > espec_floor_) ? w_e : espec_floor_;
+  w_e = (w_e > espec_floor_new) ? w_e : espec_floor_new;
 
   return;
 }
